@@ -8,11 +8,13 @@ import { Loader2, Package, Tag, BadgeCheck, ChevronLeft, ChevronRight, Search } 
 export default function InventoryList({
     centerId,
     role,
-    clusterId
+    clusterId,
+    regionId
 }: {
     centerId?: string | null,
     role: string,
-    clusterId?: string | null
+    clusterId?: string | null,
+    regionId?: string | null
 }) {
     const [items, setItems] = useState<InventoryItem[]>([])
     const [centers, setCenters] = useState<Record<string, string>>({})
@@ -63,6 +65,12 @@ export default function InventoryList({
                 const { data: clusterCenters } = await supabase.from('centers').select('id').eq('cluster_id', clusterId)
                 const cIds = clusterCenters?.map(c => c.id) || []
                 query = query.in('center_id', cIds)
+            } else if (regionId && role !== 'center_rep') {
+                const { data: regionClusters } = await supabase.from('clusters').select('id').eq('region_id', regionId)
+                const clIds = regionClusters?.map(cl => cl.id) || []
+                const { data: regionCenters } = await supabase.from('centers').select('id').in('cluster_id', clIds)
+                const cIds = regionCenters?.map(c => c.id) || []
+                query = query.in('center_id', cIds)
             }
 
             const start = (currentPage - 1) * itemsPerPage
@@ -77,7 +85,7 @@ export default function InventoryList({
             setLoading(false)
         }
         fetchInventory()
-    }, [centerId, role, clusterId, currentPage, searchTerm])
+    }, [centerId, role, clusterId, regionId, currentPage, searchTerm])
 
     if (loading && items.length === 0) {
         return (

@@ -46,12 +46,17 @@ function CreateCenterModal({ clusters, onClose, onCreated }: { clusters: Cluster
             .single()
 
         if (centerError || !center) {
-            setError(centerError?.message || "Failed to create center")
+            let msg = "Something went wrong"
+            if (centerError?.message?.includes("unique constraint")) {
+                msg = "Center with this name already exists"
+            }
+            setError(msg)
             setLoading(false)
             return
         }
 
         // 2. Create the Rep User via API
+        const selectedCluster = clusters.find(c => c.id === selectedClusterId)
         const res = await fetch('/api/admin/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -60,6 +65,7 @@ function CreateCenterModal({ clusters, onClose, onCreated }: { clusters: Cluster
                 password: repPassword,
                 full_name: `${name} Representative`,
                 role: 'center_rep',
+                region_id: selectedCluster?.region_id || null,
                 cluster_id: selectedClusterId,
                 center_id: center.id
             })
@@ -67,7 +73,7 @@ function CreateCenterModal({ clusters, onClose, onCreated }: { clusters: Cluster
 
         if (!res.ok) {
             const err = await res.json()
-            setError(`Center created but representative setup failed: ${err.error}`)
+            setError(err.error || "Something went wrong")
         } else {
             onCreated()
             onClose()

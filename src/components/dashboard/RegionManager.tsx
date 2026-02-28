@@ -3,17 +3,16 @@
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { createClient } from "@/lib/supabase/client"
-import { Profile, Region, Cluster, Center } from "@/types/database"
+import { Region } from "@/types/database"
 import {
     Plus, Trash2, Loader2, MapPin, Mail, Lock, X,
     Building2, CheckCircle2, AlertTriangle, Users, ChevronRight
 } from "lucide-react"
 
 // ----- Create Modal -----
-function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { regions: Region[], onClose: () => void, onCreated: () => void, userRegionId?: string | null }) {
+function CreateRegionModal({ onClose, onCreated }: { onClose: () => void, onCreated: () => void }) {
     const [step, setStep] = useState<1 | 2>(1)
     const [name, setName] = useState("")
-    const [regionId, setRegionId] = useState(userRegionId || "")
     const [adminEmail, setAdminEmail] = useState("")
     const [adminPassword, setAdminPassword] = useState("")
     const [loading, setLoading] = useState(false)
@@ -22,26 +21,18 @@ function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { reg
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
-        if (step === 1) {
-            if (!regionId) {
-                setError("Please select a region first")
-                return
-            }
-            setStep(2);
-            setError(null);
-            return
-        }
+        if (step === 1) { setStep(2); return }
 
         setLoading(true)
         setError(null)
 
-        const { data: cluster, error: clusterError } = await supabase
-            .from('clusters').insert({ name, region_id: regionId }).select().single()
+        const { data: region, error: regionError } = await supabase
+            .from('regions').insert({ name }).select().single()
 
-        if (clusterError || !cluster) {
+        if (regionError || !region) {
             let msg = "Something went wrong"
-            if (clusterError?.message?.includes("unique constraint")) {
-                msg = "Cluster with this name already exists"
+            if (regionError?.message?.includes("unique constraint")) {
+                msg = "Region with this name already exists"
             }
             setError(msg)
             setLoading(false)
@@ -53,9 +44,8 @@ function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { reg
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 email: adminEmail, password: adminPassword,
-                full_name: `${name} Admin`, role: 'cluster_admin',
-                region_id: regionId,
-                cluster_id: cluster.id
+                full_name: `${name} Admin`, role: 'region_admin',
+                region_id: region.id
             })
         })
 
@@ -86,14 +76,14 @@ function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { reg
                         <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center mb-3 backdrop-blur">
                             <MapPin className="w-5 h-5 text-white" />
                         </div>
-                        <h2 className="text-xl font-black text-white">New Cluster</h2>
-                        <p className="text-indigo-200 text-sm mt-1">Group multiple fellowship centers into a zone</p>
+                        <h2 className="text-xl font-black text-white">New Region</h2>
+                        <p className="text-indigo-200 text-sm mt-1">Add a high-level administrative region</p>
                     </div>
                     {/* Step indicator */}
                     <div className="flex items-center gap-2 mt-5 relative">
                         <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all ${step === 1 ? 'bg-white text-indigo-700' : 'bg-white/20 text-white'}`}>
                             <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black">1</span>
-                            Zone Details
+                            Region Details
                         </div>
                         <ChevronRight className="w-3 h-3 text-white/40" />
                         <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all ${step === 2 ? 'bg-white text-indigo-700' : 'bg-white/20 text-white'}`}>
@@ -107,29 +97,13 @@ function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { reg
                     {step === 1 ? (
                         <div className="space-y-4">
                             <label className="block space-y-2">
-                                <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Assign to Region</span>
-                                <div className="relative">
-                                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    <select
-                                        required
-                                        disabled={!!userRegionId}
-                                        className="w-full pl-10 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-300 focus:bg-white transition-all appearance-none cursor-pointer"
-                                        value={regionId}
-                                        onChange={(e) => setRegionId(e.target.value)}
-                                    >
-                                        <option value="">Select a Region</option>
-                                        {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                    </select>
-                                </div>
-                            </label>
-                            <label className="block space-y-2">
-                                <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Cluster Name</span>
+                                <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Region Name</span>
                                 <div className="relative">
                                     <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <input
                                         autoFocus
                                         type="text"
-                                        placeholder="e.g. Ibadan North Cluster"
+                                        placeholder="e.g. Oyo South Region"
                                         required
                                         className="w-full pl-10 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-300 focus:bg-white transition-all"
                                         value={name}
@@ -200,7 +174,7 @@ function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { reg
                             className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-2xl transition-all shadow-lg shadow-indigo-200 active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
                         >
                             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {loading ? "Creating..." : step === 1 ? "Next: Admin Setup →" : "Create Cluster"}
+                            {loading ? "Creating..." : step === 1 ? "Next: Admin Setup →" : "Create Region"}
                         </button>
                     </div>
                 </form>
@@ -211,14 +185,14 @@ function CreateClusterModal({ regions, onClose, onCreated, userRegionId }: { reg
 }
 
 // ----- Delete Confirm Modal -----
-function DeleteModal({ cluster, onClose, onDeleted }: { cluster: Cluster, onClose: () => void, onDeleted: () => void }) {
+function DeleteModal({ region, onClose, onDeleted }: { region: Region, onClose: () => void, onDeleted: () => void }) {
     const [loading, setLoading] = useState(false)
     const supabase = createClient()
     useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = "" } }, [])
 
     async function handleDelete() {
         setLoading(true)
-        const { error } = await supabase.from('clusters').delete().eq('id', cluster.id)
+        const { error } = await supabase.from('regions').delete().eq('id', region.id)
         if (!error) { onDeleted(); onClose() }
         setLoading(false)
     }
@@ -231,9 +205,9 @@ function DeleteModal({ cluster, onClose, onDeleted }: { cluster: Cluster, onClos
                     <Trash2 className="w-6 h-6 text-red-500" />
                 </div>
                 <div>
-                    <h3 className="text-lg font-black text-gray-900">Delete Cluster</h3>
+                    <h3 className="text-lg font-black text-gray-900">Delete Region</h3>
                     <p className="text-sm text-gray-500 mt-2">
-                        Are you sure you want to delete <strong className="text-gray-900">"{cluster.name}"</strong>? This will also remove all associated centers. Linked users will not be deleted automatically.
+                        Are you sure you want to delete <strong className="text-gray-900">"{region.name}"</strong>? This will detach all associated clusters.
                     </p>
                 </div>
                 <div className="flex gap-3">
@@ -254,59 +228,41 @@ function DeleteModal({ cluster, onClose, onDeleted }: { cluster: Cluster, onClos
 }
 
 // ----- Main Page -----
-export default function ClusterManager() {
-    const [clusters, setClusters] = useState<Cluster[]>([])
+export default function RegionManager() {
     const [regions, setRegions] = useState<Region[]>([])
-    const [centerCounts, setCenterCounts] = useState<Record<string, number>>({})
+    const [clusterCounts, setClusterCounts] = useState<Record<string, number>>({})
     const [fetching, setFetching] = useState(true)
     const [creating, setCreating] = useState(false)
-    const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<Region | null>(null)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
-    const [userProfile, setUserProfile] = useState<Profile | null>(null)
     const supabase = createClient()
 
-    useEffect(() => {
-        fetchInitialData()
-    }, [])
+    useEffect(() => { fetchRegions() }, [])
 
-    async function fetchInitialData() {
+    async function fetchRegions() {
         setFetching(true)
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-            setUserProfile(profile)
+        const [{ data }, { data: clusters }] = await Promise.all([
+            supabase.from('regions').select('*').order('name'),
+            supabase.from('clusters').select('id, region_id')
+        ])
+        if (data) setRegions(data)
+        if (clusters) {
+            const counts: Record<string, number> = {}
+            clusters.forEach(c => { if (c.region_id) counts[c.region_id] = (counts[c.region_id] || 0) + 1 })
+            setClusterCounts(counts)
         }
-        await Promise.all([fetchClusters(), fetchRegions()])
         setFetching(false)
     }
 
-    async function fetchClusters() {
-        const [{ data }, { data: centers }] = await Promise.all([
-            supabase.from('clusters').select('*').order('name'),
-            supabase.from('centers').select('id, cluster_id')
-        ])
-        if (data) setClusters(data)
-        if (centers) {
-            const counts: Record<string, number> = {}
-            centers.forEach(c => { if (c.cluster_id) counts[c.cluster_id] = (counts[c.cluster_id] || 0) + 1 })
-            setCenterCounts(counts)
-        }
-    }
-
-    async function fetchRegions() {
-        const { data } = await supabase.from('regions').select('*').order('name')
-        if (data) setRegions(data)
-    }
-
     function handleCreated() {
-        setSuccessMsg("Cluster and admin account created successfully!")
-        fetchClusters()
+        setSuccessMsg("Region and admin account created successfully!")
+        fetchRegions()
         setTimeout(() => setSuccessMsg(null), 4000)
     }
 
     function handleDeleted() {
-        setSuccessMsg("Cluster deleted.")
-        fetchClusters()
+        setSuccessMsg("Region deleted.")
+        fetchRegions()
         setTimeout(() => setSuccessMsg(null), 3000)
     }
 
@@ -323,14 +279,14 @@ export default function ClusterManager() {
             {/* Header Bar */}
             <div className="flex items-center justify-between">
                 <div>
-                    <p className="text-sm text-gray-500">{clusters.length} zone{clusters.length !== 1 ? 's' : ''} configured</p>
+                    <p className="text-sm text-gray-500">{regions.length} region{regions.length !== 1 ? 's' : ''} configured</p>
                 </div>
                 <button
                     onClick={() => setCreating(true)}
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-2xl transition-all shadow-lg shadow-indigo-200 active:scale-[0.98]"
                 >
                     <Plus className="w-4 h-4" />
-                    New Cluster
+                    New Region
                 </button>
             </div>
 
@@ -339,25 +295,25 @@ export default function ClusterManager() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {[1, 2, 3].map(i => <div key={i} className="h-36 bg-white rounded-2xl animate-pulse border border-gray-100" />)}
                 </div>
-            ) : clusters.length === 0 ? (
+            ) : regions.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center space-y-4">
                     <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto">
                         <MapPin className="w-8 h-8 text-indigo-300" />
                     </div>
                     <div>
-                        <p className="font-bold text-gray-900">No clusters yet</p>
-                        <p className="text-sm text-gray-400 mt-1">Click "New Cluster" to create your first administrative zone.</p>
+                        <p className="font-bold text-gray-900">No regions yet</p>
+                        <p className="text-sm text-gray-400 mt-1">Click "New Region" to create your first administrative region.</p>
                     </div>
                     <button onClick={() => setCreating(true)}
                         className="inline-flex items-center gap-2 bg-indigo-600 text-white text-sm font-bold px-5 py-2.5 rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all"
                     >
-                        <Plus className="w-4 h-4" /> Create First Cluster
+                        <Plus className="w-4 h-4" /> Create First Region
                     </button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {clusters.map((cluster, i) => (
-                        <div key={cluster.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all group relative overflow-hidden">
+                    {regions.map((region, i) => (
+                        <div key={region.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all group relative overflow-hidden">
                             {/* Background accent */}
                             <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -translate-y-8 translate-x-8 group-hover:scale-125 transition-transform duration-300" />
 
@@ -367,20 +323,20 @@ export default function ClusterManager() {
                                         {String.fromCharCode(65 + i)}
                                     </div>
                                     <button
-                                        onClick={() => setDeleteTarget(cluster)}
+                                        onClick={() => setDeleteTarget(region)}
                                         className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
-                                <h3 className="font-bold text-gray-900 mt-3 text-base">{cluster.name}</h3>
+                                <h3 className="font-bold text-gray-900 mt-3 text-base">{region.name}</h3>
                                 <div className="flex items-center gap-3 mt-3">
                                     <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
                                         <Building2 className="w-3 h-3" />
-                                        {centerCounts[cluster.id] || 0} Centers
+                                        {clusterCounts[region.id] || 0} Clusters
                                     </span>
                                     <span className="text-[10px] text-gray-400">
-                                        {new Date(cluster.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        {new Date(region.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
                                     </span>
                                 </div>
                             </div>
@@ -390,8 +346,8 @@ export default function ClusterManager() {
             )}
 
             {/* Modals */}
-            {creating && <CreateClusterModal regions={regions} onClose={() => setCreating(false)} onCreated={handleCreated} userRegionId={userProfile?.region_id} />}
-            {deleteTarget && <DeleteModal cluster={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={handleDeleted} />}
+            {creating && <CreateRegionModal onClose={() => setCreating(false)} onCreated={handleCreated} />}
+            {deleteTarget && <DeleteModal region={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={handleDeleted} />}
         </div>
     )
 }

@@ -7,17 +7,21 @@ import { ChartSkeleton } from "@/components/ui/Skeletons"
 import { Users, PhilippinePeso as Naira, TrendingUp } from "lucide-react"
 import { DateFilter } from "./DashboardFilters"
 
+interface DashboardTrendsProps {
+    role: string
+    centerId?: string | null
+    filter?: DateFilter
+    selectedRegionId?: string | null
+    selectedClusterId?: string | null
+}
+
 export default function DashboardTrends({
     role,
     centerId,
     filter = 'all',
+    selectedRegionId = null,
     selectedClusterId = null
-}: {
-    role: string,
-    centerId?: string | null,
-    filter?: DateFilter,
-    selectedClusterId?: string | null
-}) {
+}: DashboardTrendsProps) {
     const [loading, setLoading] = useState(true)
     const [attendanceData, setAttendanceData] = useState<any[]>([])
     const [offeringData, setOfferingData] = useState<any[]>([])
@@ -26,11 +30,18 @@ export default function DashboardTrends({
     useEffect(() => {
         async function fetchTrends() {
             setLoading(true)
+            const { data: { user } } = await supabase.auth.getUser()
 
-            let profileClusterId = null
-            if (role === 'cluster_admin') {
-                const { data: profile } = await supabase.from('profiles').select('cluster_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single()
-                profileClusterId = profile?.cluster_id
+            let userRegionId = selectedRegionId
+            let userClusterId = selectedClusterId
+
+            if (role === 'region_admin') {
+                const { data: profile } = await supabase.from('profiles').select('region_id').eq('id', user?.id || '').single()
+                userRegionId = profile?.region_id || null
+            } else if (role === 'cluster_admin') {
+                const { data: profile } = await supabase.from('profiles').select('region_id, cluster_id').eq('id', user?.id || '').single()
+                userRegionId = profile?.region_id || null
+                userClusterId = profile?.cluster_id || null
             }
 
             let attQuery = supabase.from('attendance_submissions').select('*')
@@ -52,17 +63,19 @@ export default function DashboardTrends({
             if (role === 'center_rep' && centerId) {
                 attQuery = attQuery.eq('center_id', centerId).eq('submission_level', 'center')
                 offQuery = offQuery.eq('center_id', centerId).eq('submission_level', 'center')
-            } else if (role === 'cluster_admin' && profileClusterId) {
-                const { data: centers } = await supabase.from('centers').select('id').eq('cluster_id', profileClusterId)
+            } else if (userClusterId) {
+                const { data: centers } = await supabase.from('centers').select('id').eq('cluster_id', userClusterId)
                 const centerIds = centers?.map(c => c.id) || []
-                attQuery = attQuery.or(`cluster_id.eq.${profileClusterId},center_id.in.(${centerIds.join(',')})`)
-                offQuery = offQuery.or(`cluster_id.eq.${profileClusterId},center_id.in.(${centerIds.join(',')})`)
-            } else if (role === 'super_admin' && selectedClusterId) {
-                // Super Admin selecting a specific cluster
-                const { data: centers } = await supabase.from('centers').select('id').eq('cluster_id', selectedClusterId)
+                attQuery = attQuery.or(`cluster_id.eq.${userClusterId},center_id.in.(${centerIds.join(',')})`)
+                offQuery = offQuery.or(`cluster_id.eq.${userClusterId},center_id.in.(${centerIds.join(',')})`)
+            } else if (userRegionId) {
+                const { data: clusters } = await supabase.from('clusters').select('id').eq('region_id', userRegionId)
+                const clusterIds = clusters?.map(c => c.id) || []
+                const { data: centers } = await supabase.from('centers').select('id').in('cluster_id', clusterIds)
                 const centerIds = centers?.map(c => c.id) || []
-                attQuery = attQuery.or(`cluster_id.eq.${selectedClusterId},center_id.in.(${centerIds.join(',')})`)
-                offQuery = offQuery.or(`cluster_id.eq.${selectedClusterId},center_id.in.(${centerIds.join(',')})`)
+
+                attQuery = attQuery.or(`cluster_id.in.(${clusterIds.join(',')}),center_id.in.(${centerIds.join(',')})`)
+                offQuery = offQuery.or(`cluster_id.in.(${clusterIds.join(',')}),center_id.in.(${centerIds.join(',')})`)
             }
 
             const [attRes, offRes] = await Promise.all([
@@ -109,7 +122,7 @@ export default function DashboardTrends({
             setLoading(false)
         }
         fetchTrends()
-    }, [role, centerId, filter, selectedClusterId])
+    }, [role, centerId, filter, selectedRegionId, selectedClusterId])
 
     const EmptyState = ({ label }: { label: string }) => (
         <div className="h-64 flex flex-col items-center justify-center gap-3">

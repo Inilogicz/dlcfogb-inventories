@@ -6,13 +6,14 @@ import { LayoutDashboard, Users, MapPin, ClipboardList, Package, Building2 } fro
 import ActiveLink from "./ActiveLink"
 
 const navItems = [
-    { label: "Overview", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "cluster_admin", "center_rep"] },
-    { label: "Clusters", href: "/dashboard/clusters", icon: MapPin, roles: ["super_admin"] },
-    { label: "Centers", href: "/dashboard/centers", icon: Building2, roles: ["super_admin", "cluster_admin"] },
-    { label: "Attendance", href: "/dashboard/attendance", icon: ClipboardList, roles: ["super_admin", "cluster_admin", "center_rep"] },
-    { label: "Offerings", href: "/dashboard/offerings", icon: ClipboardList, roles: ["super_admin", "cluster_admin", "center_rep"] },
-    { label: "Inventory", href: "/dashboard/inventory", icon: Package, roles: ["super_admin", "cluster_admin", "center_rep"] },
-    { label: "Users", href: "/dashboard/users", icon: Users, roles: ["super_admin"] },
+    { label: "Overview", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "region_admin", "cluster_admin", "center_rep"] },
+    { label: "Regions", href: "/dashboard/regions", icon: MapPin, roles: ["super_admin"] },
+    { label: "Clusters", href: "/dashboard/clusters", icon: MapPin, roles: ["super_admin", "region_admin"] },
+    { label: "Centers", href: "/dashboard/centers", icon: Building2, roles: ["super_admin", "region_admin", "cluster_admin"] },
+    { label: "Attendance", href: "/dashboard/attendance", icon: ClipboardList, roles: ["super_admin", "region_admin", "cluster_admin", "center_rep"] },
+    { label: "Offerings", href: "/dashboard/offerings", icon: ClipboardList, roles: ["super_admin", "region_admin", "cluster_admin", "center_rep"] },
+    { label: "Inventory", href: "/dashboard/inventory", icon: Package, roles: ["super_admin", "region_admin", "cluster_admin", "center_rep"] },
+    { label: "Users", href: "/dashboard/users", icon: Users, roles: ["super_admin", "region_admin"] },
 ]
 
 interface DashboardNavProps {

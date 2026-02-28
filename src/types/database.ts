@@ -1,17 +1,25 @@
-export type AppRole = 'super_admin' | 'cluster_admin' | 'center_rep';
+export type AppRole = 'super_admin' | 'region_admin' | 'cluster_admin' | 'center_rep';
 
 export interface Profile {
     id: string;
     full_name: string | null;
     role: AppRole;
+    region_id: string | null;
     cluster_id: string | null;
     center_id: string | null;
     updated_at: string;
 }
 
+export interface Region {
+    id: string;
+    name: string;
+    created_at: string;
+}
+
 export interface Cluster {
     id: string;
     name: string;
+    region_id: string | null;
     created_at: string;
 }
 

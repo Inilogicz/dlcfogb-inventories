@@ -22,7 +22,11 @@ export default function LoginForm() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
 
         if (error) {
-            setError(error.message)
+            let msg = "Invalid credentials or Something went wrong"
+            if (error.message.includes("Invalid login credentials")) {
+                msg = "Invalid email or password"
+            }
+            setError(msg)
             setLoading(false)
         } else {
             router.push("/dashboard")

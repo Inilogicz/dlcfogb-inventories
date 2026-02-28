@@ -6,20 +6,33 @@ import { Users, PhilippinePeso as Naira, MapPin, Building2, TrendingUp, Trending
 import { StatCardSkeleton } from "@/components/ui/Skeletons"
 import { DateFilter } from "./DashboardFilters"
 
+interface DashboardStatsProps {
+    role: string
+    centerId?: string | null
+    filter?: DateFilter
+    selectedRegionId?: string | null
+    selectedClusterId?: string | null
+}
+
+interface DashboardTrendsProps {
+    role: string
+    centerId?: string | null
+    filter?: DateFilter
+    selectedRegionId?: string | null
+    selectedClusterId?: string | null
+}
+
 export default function DashboardStats({
     role,
     centerId,
     filter = 'all',
+    selectedRegionId = null,
     selectedClusterId = null
-}: {
-    role: string,
-    centerId?: string | null,
-    filter?: DateFilter,
-    selectedClusterId?: string | null
-}) {
+}: DashboardStatsProps) {
     const [stats, setStats] = useState({
         totalAttendance: 0,
         totalOffering: 0,
+        regions: 0,
         clusters: 0,
         centers: 0
     })
@@ -29,10 +42,18 @@ export default function DashboardStats({
     useEffect(() => {
         async function fetchStats() {
             setLoading(true)
-            let clusterId = null
-            if (role === 'cluster_admin' || role === 'center_rep') {
-                const { data: profile } = await supabase.from('profiles').select('cluster_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single()
-                clusterId = profile?.cluster_id
+            const { data: { user } } = await supabase.auth.getUser()
+
+            let userRegionId = selectedRegionId
+            let userClusterId = selectedClusterId
+
+            if (role === 'region_admin') {
+                const { data: profile } = await supabase.from('profiles').select('region_id').eq('id', user?.id || '').single()
+                userRegionId = profile?.region_id || null
+            } else if (role === 'cluster_admin' || role === 'center_rep') {
+                const { data: profile } = await supabase.from('profiles').select('region_id, cluster_id').eq('id', user?.id || '').single()
+                userRegionId = profile?.region_id || null
+                userClusterId = profile?.cluster_id || null
             }
 
             let attendanceQuery = supabase.from('attendance_submissions').select('*')
@@ -51,31 +72,35 @@ export default function DashboardStats({
                 offeringQuery = offeringQuery.gte('service_date', dateStr)
             }
 
-            // Role and Cluster based filtering
+            // Data filtering logic
             if (role === 'center_rep' && centerId) {
                 attendanceQuery = attendanceQuery.eq('center_id', centerId).eq('submission_level', 'center')
                 offeringQuery = offeringQuery.eq('center_id', centerId).eq('submission_level', 'center')
-            } else if (role === 'cluster_admin' && clusterId) {
-                const { data: centers } = await supabase.from('centers').select('id').eq('cluster_id', clusterId)
+            } else if (userClusterId) {
+                const { data: centers } = await supabase.from('centers').select('id').eq('cluster_id', userClusterId)
                 const centerIds = centers?.map(c => c.id) || []
-                attendanceQuery = attendanceQuery.or(`cluster_id.eq.${clusterId},center_id.in.(${centerIds.join(',')})`)
-                offeringQuery = offeringQuery.or(`cluster_id.eq.${clusterId},center_id.in.(${centerIds.join(',')})`)
-            } else if (role === 'super_admin' && selectedClusterId) {
-                // Super Admin selecting a specific cluster
-                const { data: centers } = await supabase.from('centers').select('id').eq('cluster_id', selectedClusterId)
+                attendanceQuery = attendanceQuery.or(`cluster_id.eq.${userClusterId},center_id.in.(${centerIds.join(',')})`)
+                offeringQuery = offeringQuery.or(`cluster_id.eq.${userClusterId},center_id.in.(${centerIds.join(',')})`)
+            } else if (userRegionId) {
+                // Filter by region
+                const { data: clusters } = await supabase.from('clusters').select('id').eq('region_id', userRegionId)
+                const clusterIds = clusters?.map(c => c.id) || []
+                const { data: centers } = await supabase.from('centers').select('id').in('cluster_id', clusterIds)
                 const centerIds = centers?.map(c => c.id) || []
-                attendanceQuery = attendanceQuery.or(`cluster_id.eq.${selectedClusterId},center_id.in.(${centerIds.join(',')})`)
-                offeringQuery = offeringQuery.or(`cluster_id.eq.${selectedClusterId},center_id.in.(${centerIds.join(',')})`)
+
+                attendanceQuery = attendanceQuery.or(`cluster_id.in.(${clusterIds.join(',')}),center_id.in.(${centerIds.join(',')})`)
+                offeringQuery = offeringQuery.or(`cluster_id.in.(${clusterIds.join(',')}),center_id.in.(${centerIds.join(',')})`)
             }
 
-            const [attRes, offRes, clusRes, centRes] = await Promise.all([
+            const [attRes, offRes, regRes, clusRes, centRes] = await Promise.all([
                 attendanceQuery,
                 offeringQuery,
+                supabase.from('regions').select('id', { count: 'exact' }),
                 supabase.from('clusters').select('id', { count: 'exact' }),
                 supabase.from('centers').select('id', { count: 'exact' })
             ])
 
-            // Robust calculation for attendance (sum up columns if grand_total is missing/buggy)
+            // Robust calculation for attendance
             const totalAtt = attRes.data?.reduce((sum, item) => {
                 const manualTotal = (
                     (item.adult_brothers || 0) + (item.adult_sisters || 0) +
@@ -91,13 +116,14 @@ export default function DashboardStats({
             setStats({
                 totalAttendance: totalAtt,
                 totalOffering: totalOff,
+                regions: regRes.count || 0,
                 clusters: clusRes.count || 0,
                 centers: centRes.count || 0
             })
             setLoading(false)
         }
         fetchStats()
-    }, [centerId, role, filter, selectedClusterId])
+    }, [centerId, role, filter, selectedRegionId, selectedClusterId])
 
     if (loading) {
         return (
@@ -107,24 +133,16 @@ export default function DashboardStats({
         )
     }
 
-    const displayStats = [
+    const allStats = [
         {
-            label: "Total Attendance",
-            value: stats.totalAttendance.toLocaleString(),
-            icon: Users,
-            gradient: "from-blue-500 to-brand-blue",
-            bg: "bg-blue-50",
-            trend: filter === 'all' ? "Historical total" : `Last ${filter === '7d' ? '7' : filter === '30d' ? '30' : '90'} days`,
-            up: true,
-        },
-        {
-            label: "Total Offering (100%)",
-            value: `₦${stats.totalOffering.toLocaleString()}`,
-            icon: Naira,
-            gradient: "from-amber-400 to-brand-orange",
-            bg: "bg-amber-50",
-            trend: filter === 'all' ? "Historical total" : `Last ${filter === '7d' ? '7' : filter === '30d' ? '30' : '90'} days`,
-            up: true,
+            label: "Total Regions",
+            value: stats.regions.toString(),
+            icon: MapPin,
+            gradient: "from-indigo-500 to-blue-700",
+            bg: "bg-indigo-50",
+            trend: "Administrative levels",
+            up: null,
+            showIf: role === 'super_admin'
         },
         {
             label: "Total Clusters",
@@ -134,6 +152,7 @@ export default function DashboardStats({
             bg: "bg-violet-50",
             trend: "Active zones",
             up: null,
+            showIf: true
         },
         {
             label: "Total Centers",
@@ -143,13 +162,36 @@ export default function DashboardStats({
             bg: "bg-emerald-50",
             trend: "All locations",
             up: null,
+            showIf: true
+        },
+        {
+            label: "Total Attendance",
+            value: stats.totalAttendance.toLocaleString(),
+            icon: Users,
+            gradient: "from-blue-500 to-brand-blue",
+            bg: "bg-blue-50",
+            trend: filter === 'all' ? "Historical total" : `Last ${filter === '7d' ? '7' : filter === '30d' ? '30' : '90'} days`,
+            up: true,
+            showIf: true
+        },
+        {
+            label: "Total Offering (100%)",
+            value: `₦${stats.totalOffering.toLocaleString()}`,
+            icon: Naira,
+            gradient: "from-amber-400 to-brand-orange",
+            bg: "bg-amber-50",
+            trend: filter === 'all' ? "Historical total" : `Last ${filter === '7d' ? '7' : filter === '30d' ? '30' : '90'} days`,
+            up: true,
+            showIf: true
         },
     ]
 
+    const filteredStats = allStats.filter(s => s.showIf)
+
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {displayStats.map((stat, i) => (
-                <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow group overflow-hidden relative">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(filteredStats.length, 4)} xl:grid-cols-${filteredStats.length} gap-5`}>
+            {filteredStats.map((stat, i) => (
+                <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow group overflow-hidden relative text-left">
                     <div className={`absolute top-0 right-0 w-28 h-28 rounded-full bg-gradient-to-br ${stat.gradient} opacity-5 -translate-y-4 translate-x-4 group-hover:opacity-10 transition-opacity`} />
                     <div className="flex items-start justify-between">
                         <div className={`p-2.5 rounded-xl ${stat.bg}`}>

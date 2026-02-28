@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Cluster } from "@/types/database"
+import { Cluster, Region } from "@/types/database"
 import DashboardStats from "./DashboardStats"
 import DashboardTrends from "./DashboardTrends"
 import DashboardFilters, { DateFilter } from "./DashboardFilters"
@@ -14,22 +14,62 @@ interface DashboardContainerProps {
 
 export default function DashboardContainer({ role, centerId }: DashboardContainerProps) {
     const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+    const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null)
     const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null)
+    const [regions, setRegions] = useState<Region[]>([])
     const [clusters, setClusters] = useState<Cluster[]>([])
-    const [fetchingClusters, setFetchingClusters] = useState(false)
+    const [fetchingData, setFetchingData] = useState(false)
     const supabase = createClient()
 
     useEffect(() => {
-        if (role === 'super_admin') {
-            async function fetchClusters() {
-                setFetchingClusters(true)
+        async function fetchInitialData() {
+            setFetchingData(true)
+
+            if (role === 'super_admin') {
+                const { data: regionsData } = await supabase.from('regions').select('*').order('name')
+                if (regionsData) setRegions(regionsData)
+
+                const { data: clustersData } = await supabase.from('clusters').select('*').order('name')
+                if (clustersData) setClusters(clustersData)
+            } else if (role === 'region_admin') {
+                const { data: profile } = await supabase.auth.getUser().then(({ data: { user } }) =>
+                    supabase.from('profiles').select('region_id').eq('id', user?.id || '').single()
+                )
+                const regionId = profile?.region_id
+                setSelectedRegionId(regionId || null)
+
+                if (regionId) {
+                    const { data: clustersData } = await supabase.from('clusters').select('*').eq('region_id', regionId).order('name')
+                    if (clustersData) setClusters(clustersData)
+                }
+            }
+
+            setFetchingData(false)
+        }
+        fetchInitialData()
+    }, [role])
+
+    // Update clusters when region changes for Super Admin
+    useEffect(() => {
+        if (role === 'super_admin' && selectedRegionId) {
+            async function fetchFilteredClusters() {
+                const { data } = await supabase
+                    .from('clusters')
+                    .select('*')
+                    .eq('region_id', selectedRegionId)
+                    .order('name')
+                if (data) setClusters(data)
+                setSelectedClusterId(null) // Reset cluster when region changes
+            }
+            fetchFilteredClusters()
+        } else if (role === 'super_admin' && !selectedRegionId) {
+            async function fetchAllClusters() {
                 const { data } = await supabase.from('clusters').select('*').order('name')
                 if (data) setClusters(data)
-                setFetchingClusters(false)
             }
-            fetchClusters()
+            fetchAllClusters()
         }
-    }, [role])
+    }, [selectedRegionId, role])
 
     return (
         <div className="space-y-8">
@@ -40,7 +80,10 @@ export default function DashboardContainer({ role, centerId }: DashboardContaine
                 </div>
                 <DashboardFilters
                     onFilterChange={setDateFilter}
-                    clusters={role === 'super_admin' ? clusters : undefined}
+                    regions={role === 'super_admin' ? regions : undefined}
+                    selectedRegionId={selectedRegionId}
+                    onRegionChange={setSelectedRegionId}
+                    clusters={clusters}
                     selectedClusterId={selectedClusterId}
                     onClusterChange={setSelectedClusterId}
                 />
@@ -51,6 +94,7 @@ export default function DashboardContainer({ role, centerId }: DashboardContaine
                 role={role}
                 centerId={centerId}
                 filter={dateFilter}
+                selectedRegionId={selectedRegionId}
                 selectedClusterId={selectedClusterId}
             />
 
@@ -64,6 +108,7 @@ export default function DashboardContainer({ role, centerId }: DashboardContaine
                     role={role}
                     centerId={centerId}
                     filter={dateFilter}
+                    selectedRegionId={selectedRegionId}
                     selectedClusterId={selectedClusterId}
                 />
             </div>

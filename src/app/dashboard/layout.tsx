@@ -13,6 +13,7 @@ export default async function DashboardLayout({
 
     const roleLabels: Record<string, string> = {
         super_admin: "Super Admin",
+        region_admin: "Region Admin",
         cluster_admin: "Cluster Admin",
         center_rep: "Center Rep",
     }

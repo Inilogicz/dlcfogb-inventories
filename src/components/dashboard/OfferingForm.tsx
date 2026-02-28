@@ -50,7 +50,7 @@ export default function OfferingForm({ centerId }: { centerId: string }) {
             if (error.code === '23505') {
                 setMessage({ type: 'error', text: "A submission already exists for this date and service type." })
             } else {
-                setMessage({ type: 'error', text: error.message })
+                setMessage({ type: 'error', text: "Something went wrong" })
             }
         } else {
             setMessage({ type: 'success', text: "Offering submitted successfully!" })

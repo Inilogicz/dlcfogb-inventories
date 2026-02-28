@@ -50,7 +50,7 @@ export default function InventoryForm({ centerId }: { centerId: string }) {
                 }
             } catch (err: any) {
                 console.error("Upload error:", err)
-                setMessage({ type: 'error', text: `Image upload failed: ${err.message}` })
+                setMessage({ type: 'error', text: "Image upload failed" })
                 setLoading(false)
                 return
             }
@@ -70,7 +70,7 @@ export default function InventoryForm({ centerId }: { centerId: string }) {
             })
 
         if (error) {
-            setMessage({ type: 'error', text: error.message })
+            setMessage({ type: 'error', text: "Something went wrong" })
         } else {
             setMessage({ type: 'success', text: "Inventory item added successfully!" })
             setName("")

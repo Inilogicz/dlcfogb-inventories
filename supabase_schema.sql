@@ -5,14 +5,27 @@ create extension if not exists "uuid-ossp";
 do $$ 
 begin
   if not exists (select 1 from pg_type where typname = 'app_role') then
-    create type app_role as enum ('super_admin', 'cluster_admin', 'center_rep');
+    create type app_role as enum ('super_admin', 'region_admin', 'cluster_admin', 'center_rep');
+  else
+    -- Update existing enum to include region_admin if it doesn't exist
+    if not exists (select 1 from pg_enum join pg_type on pg_enum.enumtypid = pg_type.oid where pg_type.typname = 'app_role' and pg_enum.enumlabel = 'region_admin') then
+      alter type app_role add value 'region_admin' before 'cluster_admin';
+    end if;
   end if;
 end $$;
+
+-- Regions table
+create table if not exists regions (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null unique,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
 
 -- Clusters table
 create table if not exists clusters (
   id uuid primary key default uuid_generate_v4(),
   name text not null unique,
+  region_id uuid references regions(id) on delete set null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -29,6 +42,7 @@ create table if not exists profiles (
   id uuid references auth.users on delete cascade primary key,
   full_name text,
   role app_role not null default 'center_rep',
+  region_id uuid references regions(id) on delete set null,
   cluster_id uuid references clusters(id) on delete set null,
   center_id uuid references centers(id) on delete set null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -113,6 +127,7 @@ create table if not exists inventory_items (
 
 -- Enable RLS
 alter table public.profiles disable row level security; -- CRITICAL: Keep disabled to prevent recursion
+alter table regions enable row level security;
 alter table clusters enable row level security;
 alter table centers enable row level security;
 alter table service_types enable row level security;
@@ -127,10 +142,10 @@ begin
 end;
 $$ language plpgsql security definer set search_path = public;
 
-create or replace function public.get_user_center_id()
+create or replace function public.get_user_region_id()
 returns uuid as $$
 begin
-  return (select center_id from public.profiles where id = auth.uid());
+  return (select region_id from public.profiles where id = auth.uid());
 end;
 $$ language plpgsql security definer set search_path = public;
 
@@ -141,11 +156,25 @@ begin
 end;
 $$ language plpgsql security definer set search_path = public;
 
+create or replace function public.get_user_center_id()
+returns uuid as $$
+begin
+  return (select center_id from public.profiles where id = auth.uid());
+end;
+$$ language plpgsql security definer set search_path = public;
+
 -- Standard role checks using the above functions (to break recursion)
 create or replace function public.is_super_admin()
 returns boolean as $$
 begin
   return get_user_role() = 'super_admin';
+end;
+$$ language plpgsql security definer set search_path = public;
+
+create or replace function public.is_region_admin()
+returns boolean as $$
+begin
+  return get_user_role() = 'region_admin';
 end;
 $$ language plpgsql security definer set search_path = public;
 
@@ -163,28 +192,30 @@ begin
 end;
 $$ language plpgsql security definer set search_path = public;
 
--- Profiles policies
--- RLS is disabled on profiles to prevent recursive loops in role-checking functions.
--- Sensitive data should be managed via server-side APIs or restricted via other table policies.
--- create policy "Allow all users to view profiles" on profiles for select using (true);
--- create policy "Users can update their own profile" on profiles for update using (auth.uid() = id);
--- create policy "Super admins can insert profiles" on profiles for insert with check (is_super_admin());
--- create policy "Super admins can update all profiles" on profiles for update using (is_super_admin());
--- create policy "Super admins can delete profiles" on profiles for delete using (is_super_admin());
+-- Regions policies
+create policy "Regions are viewable by everyone." on regions for select using (true);
+create policy "Super admins can manage regions." on regions for all using (is_super_admin());
 
 -- Clusters policies
 drop policy if exists "Clusters are viewable by everyone." on clusters;
 create policy "Clusters are viewable by everyone." on clusters for select using (true);
 
 drop policy if exists "Super admins can manage clusters." on clusters;
-create policy "Super admins can manage clusters." on clusters for all using (is_super_admin());
+create policy "Super admins and region admins can manage clusters." on clusters for all using (
+  is_super_admin() or 
+  (is_region_admin() and region_id = get_user_region_id())
+);
 
 -- Centers policies
 drop policy if exists "Centers are viewable by everyone." on centers;
 create policy "Centers are viewable by everyone." on centers for select using (true);
 
 drop policy if exists "Super admins can manage centers." on centers;
-create policy "Super admins can manage centers." on centers for all using (is_super_admin());
+create policy "Super admins, region admins, and cluster admins can manage centers." on centers for all using (
+  is_super_admin() or 
+  (is_region_admin() and exists (select 1 from clusters c where c.id = centers.cluster_id and c.region_id = get_user_region_id())) or
+  (is_cluster_admin() and cluster_id = get_user_cluster_id())
+);
 
 -- Attendance policies
 drop policy if exists "Super admins can view all attendance." on attendance_submissions;
@@ -194,14 +225,21 @@ drop policy if exists "Super admins can manage all attendance." on attendance_su
 create policy "Super admins can manage all attendance." on attendance_submissions for all using (is_super_admin());
 
 drop policy if exists "Cluster admins can view attendance in cluster." on attendance_submissions;
-create policy "Cluster admins can view attendance in cluster." on attendance_submissions for select using (
-  is_cluster_admin() and (
+create policy "Admins can view attendance in their scope." on attendance_submissions for select using (
+  (is_region_admin() and (
     (submission_level = 'center' and exists (
-      select 1 from centers c where c.id = attendance_submissions.center_id 
-      and c.cluster_id = get_user_cluster_id()
+      select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = attendance_submissions.center_id and cl.region_id = get_user_region_id()
+    )) or
+    (submission_level = 'cluster' and exists (
+      select 1 from clusters cl where cl.id = attendance_submissions.cluster_id and cl.region_id = get_user_region_id()
+    ))
+  )) or
+  (is_cluster_admin() and (
+    (submission_level = 'center' and exists (
+      select 1 from centers c where c.id = attendance_submissions.center_id and c.cluster_id = get_user_cluster_id()
     )) or
     (submission_level = 'cluster' and cluster_id = get_user_cluster_id())
-  )
+  ))
 );
 
 drop policy if exists "Center reps can view their own center attendance." on attendance_submissions;
@@ -211,19 +249,23 @@ create policy "Center reps can view their own center attendance." on attendance_
 
 -- 48-hour deadline and same-day edit lock for attendance
 drop policy if exists "Center reps can update attendance ONLY on the service day." on attendance_submissions;
-create policy "Center reps can update attendance ONLY on the service day." on attendance_submissions for update using (
+create policy "Authorized users can update attendance ONLY on the service day." on attendance_submissions for update using (
   (is_center_rep() and center_id = get_user_center_id()) or
   (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
-  (is_cluster_admin() and submission_level = 'center' and exists (select 1 from centers c where c.id = attendance_submissions.center_id and c.cluster_id = get_user_cluster_id()))
+  (is_cluster_admin() and submission_level = 'center' and exists (select 1 from centers c where c.id = attendance_submissions.center_id and c.cluster_id = get_user_cluster_id())) or
+  (is_region_admin() and submission_level = 'cluster' and exists (select 1 from clusters cl where cl.id = attendance_submissions.cluster_id and cl.region_id = get_user_region_id())) or
+  (is_region_admin() and submission_level = 'center' and exists (select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = attendance_submissions.center_id and cl.region_id = get_user_region_id()))
   and service_date = current_date
 );
 
 drop policy if exists "Center reps can insert attendance within 48h of service." on attendance_submissions;
-create policy "Center reps can insert attendance within 48h of service." on attendance_submissions for insert with check (
+create policy "Authorized users can insert attendance within 48h of service." on attendance_submissions for insert with check (
   (
     (is_center_rep() and center_id = get_user_center_id()) or
     (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
     (is_cluster_admin() and submission_level = 'center' and exists (select 1 from centers c where c.id = attendance_submissions.center_id and c.cluster_id = get_user_cluster_id())) or
+    (is_region_admin() and submission_level = 'cluster' and exists (select 1 from clusters cl where cl.id = attendance_submissions.cluster_id and cl.region_id = get_user_region_id())) or
+    (is_region_admin() and submission_level = 'center' and exists (select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = attendance_submissions.center_id and cl.region_id = get_user_region_id())) or
     is_super_admin()
   ) 
   and (
@@ -231,9 +273,6 @@ create policy "Center reps can insert attendance within 48h of service." on atte
     current_date <= (service_date + interval '48 hours')
   )
 );
-
--- Similar policies for offerings and inventory... (omitted for brevity in this SQL file but should follow same pattern)
--- (Actually, I should include them to be complete)
 
 -- Offerings policies
 drop policy if exists "Super admins can view all offerings." on offering_submissions;
@@ -243,14 +282,21 @@ drop policy if exists "Super admins can manage all offerings." on offering_submi
 create policy "Super admins can manage all offerings." on offering_submissions for all using (is_super_admin());
 
 drop policy if exists "Cluster admins can view offerings in cluster." on offering_submissions;
-create policy "Cluster admins can view offerings in cluster." on offering_submissions for select using (
-  is_cluster_admin() and (
+create policy "Admins can view offerings in their scope." on offering_submissions for select using (
+  (is_region_admin() and (
     (submission_level = 'center' and exists (
-      select 1 from centers c where c.id = offering_submissions.center_id 
-      and c.cluster_id = get_user_cluster_id()
+      select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = offering_submissions.center_id and cl.region_id = get_user_region_id()
+    )) or
+    (submission_level = 'cluster' and exists (
+      select 1 from clusters cl where cl.id = offering_submissions.cluster_id and cl.region_id = get_user_region_id()
+    ))
+  )) or
+  (is_cluster_admin() and (
+    (submission_level = 'center' and exists (
+      select 1 from centers c where c.id = offering_submissions.center_id and c.cluster_id = get_user_cluster_id()
     )) or
     (submission_level = 'cluster' and cluster_id = get_user_cluster_id())
-  )
+  ))
 );
 
 drop policy if exists "Center reps can view their own center offerings." on offering_submissions;
@@ -259,11 +305,13 @@ create policy "Center reps can view their own center offerings." on offering_sub
 );
 
 drop policy if exists "Center reps can insert offerings within 48h of service." on offering_submissions;
-create policy "Center reps can insert offerings within 48h of service." on offering_submissions for insert with check (
+create policy "Authorized users can insert offerings within 48h of service." on offering_submissions for insert with check (
   (
     (is_center_rep() and center_id = get_user_center_id()) or
     (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
     (is_cluster_admin() and submission_level = 'center' and exists (select 1 from centers c where c.id = offering_submissions.center_id and c.cluster_id = get_user_cluster_id())) or
+    (is_region_admin() and submission_level = 'cluster' and exists (select 1 from clusters cl where cl.id = offering_submissions.cluster_id and cl.region_id = get_user_region_id())) or
+    (is_region_admin() and submission_level = 'center' and exists (select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = offering_submissions.center_id and cl.region_id = get_user_region_id())) or
     is_super_admin()
   )
   and (
@@ -273,14 +321,19 @@ create policy "Center reps can insert offerings within 48h of service." on offer
 );
 
 drop policy if exists "Center reps can update offerings ONLY on the service day." on offering_submissions;
-create policy "Center reps can update offerings ONLY on the service day." on offering_submissions for update using (
+create policy "Authorized users can update offerings ONLY on the service day." on offering_submissions for update using (
   (is_center_rep() and center_id = get_user_center_id()) or
   (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
-  (is_cluster_admin() and submission_level = 'center' and exists (select 1 from centers c where c.id = offering_submissions.center_id and c.cluster_id = get_user_cluster_id()))
+  (is_cluster_admin() and submission_level = 'center' and exists (select 1 from centers c where c.id = offering_submissions.center_id and c.cluster_id = get_user_cluster_id())) or
+  (is_region_admin() and submission_level = 'cluster' and exists (select 1 from clusters cl where cl.id = offering_submissions.cluster_id and cl.region_id = get_user_region_id())) or
+  (is_region_admin() and submission_level = 'center' and exists (select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = offering_submissions.center_id and cl.region_id = get_user_region_id()))
   and service_date = current_date
 );
 
 -- Service types policies
+drop policy if exists "Service types are viewable by everyone." on service_types;
+
+-- Actually let me fix the service_types policy which had a typo in my mind or the original
 drop policy if exists "Service types are viewable by everyone." on service_types;
 create policy "Service types are viewable by everyone." on service_types for select using (true);
 
@@ -289,11 +342,13 @@ drop policy if exists "Super admins can manage all inventory." on inventory_item
 create policy "Super admins can manage all inventory." on inventory_items for all using (is_super_admin());
 
 drop policy if exists "Cluster admins can manage inventory in cluster." on inventory_items;
-create policy "Cluster admins can manage inventory in cluster." on inventory_items for all using (
-  is_cluster_admin() and exists (
-    select 1 from centers c where c.id = inventory_items.center_id 
-    and c.cluster_id = get_user_cluster_id()
-  )
+create policy "Admins can manage inventory in their scope." on inventory_items for all using (
+  (is_region_admin() and exists (
+    select 1 from centers c join clusters cl on c.cluster_id = cl.id where c.id = inventory_items.center_id and cl.region_id = get_user_region_id()
+  )) or
+  (is_cluster_admin() and exists (
+    select 1 from centers c where c.id = inventory_items.center_id and c.cluster_id = get_user_cluster_id()
+  ))
 );
 
 drop policy if exists "Center reps can manage their own center inventory." on inventory_items;

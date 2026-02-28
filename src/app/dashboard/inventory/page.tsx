@@ -10,10 +10,12 @@ import { Loader2, Filter } from "lucide-react"
 export default function InventoryPage() {
     const [profile, setProfile] = useState<any>(null)
     const [loading, setLoading] = useState(true)
+    const [regions, setRegions] = useState<any[]>([])
     const [clusters, setClusters] = useState<any[]>([])
     const [centers, setCenters] = useState<any[]>([])
 
     // Filter states
+    const [selectedRegion, setSelectedRegion] = useState<string>("")
     const [selectedCluster, setSelectedCluster] = useState<string>("")
     const [selectedCenter, setSelectedCenter] = useState<string>("")
 
@@ -21,21 +23,27 @@ export default function InventoryPage() {
 
     useEffect(() => {
         async function init() {
-            // In a real app, requireUser might be server-side, 
-            // but since we converted to client, we fetch profile here
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
             const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
             setProfile(prof)
 
-            if (prof?.role === 'super_admin' || prof?.role === 'cluster_admin') {
-                const [{ data: clusts }, { data: cents }] = await Promise.all([
-                    supabase.from('clusters').select('id, name').order('name'),
-                    supabase.from('centers').select('id, name, cluster_id').order('name')
-                ])
-                setClusters(clusts || [])
-                setCenters(cents || [])
+            if (prof?.role === 'super_admin' || prof?.role === 'region_admin' || prof?.role === 'cluster_admin') {
+                const queries: Promise<any>[] = [
+                    supabase.from('clusters').select('id, name, region_id').order('name') as any,
+                    supabase.from('centers').select('id, name, cluster_id').order('name') as any
+                ]
+                if (prof?.role === 'super_admin') {
+                    queries.push(supabase.from('regions').select('id, name').order('name') as any)
+                }
+
+                const results = await Promise.all(queries)
+                setClusters(results[0].data || [])
+                setCenters(results[1].data || [])
+                if (prof?.role === 'super_admin') {
+                    setRegions(results[2].data || [])
+                }
             }
             setLoading(false)
         }
@@ -55,6 +63,14 @@ export default function InventoryPage() {
 
     if (!profile.center_id && role === 'center_rep') {
         return <div>Error: Center Representative session but no Center ID assigned.</div>
+    }
+
+    // Filter logic
+    let filteredClusters = clusters
+    if (role === 'region_admin') {
+        filteredClusters = clusters.filter(c => c.region_id === profile.region_id)
+    } else if (selectedRegion) {
+        filteredClusters = clusters.filter(c => c.region_id === selectedRegion)
     }
 
     const filteredCenters = selectedCluster
@@ -90,14 +106,31 @@ export default function InventoryPage() {
                             {role === 'super_admin' && (
                                 <select
                                     className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-brand-blue/10 min-w-[150px]"
+                                    value={selectedRegion}
+                                    onChange={(e) => {
+                                        setSelectedRegion(e.target.value)
+                                        setSelectedCluster("")
+                                        setSelectedCenter("")
+                                    }}
+                                >
+                                    <option value="">All Regions</option>
+                                    {regions.map(r => (
+                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                </select>
+                            )}
+
+                            {(role === 'super_admin' || role === 'region_admin') && (
+                                <select
+                                    className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-brand-blue/10 min-w-[150px]"
                                     value={selectedCluster}
                                     onChange={(e) => {
                                         setSelectedCluster(e.target.value)
-                                        setSelectedCenter("") // Reset center when cluster changes
+                                        setSelectedCenter("")
                                     }}
                                 >
                                     <option value="">All Clusters</option>
-                                    {clusters.map(c => (
+                                    {filteredClusters.map(c => (
                                         <option key={c.id} value={c.id}>{c.name}</option>
                                     ))}
                                 </select>
@@ -114,9 +147,9 @@ export default function InventoryPage() {
                                 ))}
                             </select>
 
-                            {(selectedCluster || selectedCenter) && (
+                            {(selectedRegion || selectedCluster || selectedCenter) && (
                                 <button
-                                    onClick={() => { setSelectedCluster(""); setSelectedCenter(""); }}
+                                    onClick={() => { setSelectedRegion(""); setSelectedCluster(""); setSelectedCenter(""); }}
                                     className="text-[10px] text-brand-orange font-black uppercase hover:underline"
                                 >
                                     Clear Filters
@@ -126,13 +159,14 @@ export default function InventoryPage() {
 
                         <div className="text-right shrink-0">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                {role === 'super_admin' ? 'Organization Wide' : 'Cluster Assets'}
+                                {role === 'super_admin' ? 'Organization Wide' : role === 'region_admin' ? 'Regional Assets' : 'Cluster Assets'}
                             </p>
                         </div>
                     </div>
 
                     <InventoryList
                         role={role}
+                        regionId={selectedRegion || profile.region_id}
                         clusterId={selectedCluster || profile.cluster_id}
                         centerId={selectedCenter}
                     />

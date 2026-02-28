@@ -56,12 +56,32 @@ export default function UnifiedSubmissionList({
                 attQuery = attQuery.eq('center_id', centerId).eq('submission_level', 'center')
                 offQuery = offQuery.eq('center_id', centerId).eq('submission_level', 'center')
             } else if (role === 'cluster_admin') {
-                const { data: profile } = await supabase.from('profiles').select('cluster_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single()
+                const { data: { user } } = await supabase.auth.getUser()
+                const { data: profile } = await supabase.from('profiles').select('cluster_id').eq('id', user?.id).single()
                 if (profile?.cluster_id) {
                     const { data: clusterCenters } = await supabase.from('centers').select('id').eq('cluster_id', profile.cluster_id)
                     const centerIds = clusterCenters?.map(c => c.id) || []
                     attQuery = attQuery.or(`cluster_id.eq.${profile.cluster_id},center_id.in.(${centerIds.join(',')})`)
                     offQuery = offQuery.or(`cluster_id.eq.${profile.cluster_id},center_id.in.(${centerIds.join(',')})`)
+                }
+            } else if (role === 'region_admin') {
+                const { data: { user } } = await supabase.auth.getUser()
+                const { data: profile } = await supabase.from('profiles').select('region_id').eq('id', user?.id).single()
+                if (profile?.region_id) {
+                    const { data: regionClusters } = await supabase.from('clusters').select('id').eq('region_id', profile.region_id)
+                    const clusterIds = regionClusters?.map(cl => cl.id) || []
+                    const { data: regionCenters } = await supabase.from('centers').select('id').in('cluster_id', clusterIds)
+                    const centerIds = regionCenters?.map(c => c.id) || []
+
+                    // Filter by identifying if the submission belongs to the region via cluster or center
+                    if (clusterIds.length > 0 || centerIds.length > 0) {
+                        const clusterFilter = clusterIds.length > 0 ? `cluster_id.in.(${clusterIds.join(',')})` : ''
+                        const centerFilter = centerIds.length > 0 ? `center_id.in.(${centerIds.join(',')})` : ''
+                        const combinedFilter = [clusterFilter, centerFilter].filter(Boolean).join(',')
+
+                        attQuery = attQuery.or(combinedFilter)
+                        offQuery = offQuery.or(combinedFilter)
+                    }
                 }
             }
 
