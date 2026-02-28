@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-orange: #F28C28;
+  --color-brand-blue: #1E3A8A;
+  --color-background: #F4F6FB;
+  --color-foreground: #1E3A8A;
+  
+  --color-sidebar: #1E3A8A;
+  --color-sidebar-foreground: #ffffff;
+  --color-primary: #F28C28;
+  --color-primary-foreground: #ffffff;
+}
+
+:root {
+  --background: #F4F6FB;
+  --foreground: #0F1A3E;
+  --brand-orange: #F28C28;
+  --brand-blue: #1E3A8A;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+@layer base {
+  button {
+    cursor: pointer;
+  }
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes zoom-in-95 {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-in {
+  animation-duration: 200ms;
+  animation-fill-mode: forwards;
+}
+
+.fade-in { animation-name: fade-in; }
+.slide-in-from-right { animation-name: slide-in-from-right; }
+.slide-up { animation-name: slide-up; }
+.zoom-in-95 { animation-name: zoom-in-95; }
+
+/* Glass card util */
+.glass {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
