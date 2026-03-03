@@ -92,12 +92,30 @@ export default function DashboardStats({
                 offeringQuery = offeringQuery.or(`cluster_id.in.(${clusterIds.join(',')}),center_id.in.(${centerIds.join(',')})`)
             }
 
+            let regionsCountQuery = supabase.from('regions').select('id', { count: 'exact' })
+            let clustersCountQuery = supabase.from('clusters').select('id', { count: 'exact' })
+            let centersCountQuery = supabase.from('centers').select('id', { count: 'exact' })
+
+            if (userClusterId) {
+                // For cluster admin, only their cluster and its centers count
+                regionsCountQuery = regionsCountQuery.eq('id', '00000000-0000-0000-0000-000000000000') // None
+                clustersCountQuery = clustersCountQuery.eq('id', userClusterId)
+                centersCountQuery = centersCountQuery.eq('cluster_id', userClusterId)
+            } else if (userRegionId) {
+                // For region admin, only their region, its clusters and their centers count
+                regionsCountQuery = regionsCountQuery.eq('id', userRegionId)
+                clustersCountQuery = clustersCountQuery.eq('region_id', userRegionId)
+                const { data: regionClusters } = await supabase.from('clusters').select('id').eq('region_id', userRegionId)
+                const clIds = regionClusters?.map(cl => cl.id) || []
+                centersCountQuery = centersCountQuery.in('cluster_id', clIds)
+            }
+
             const [attRes, offRes, regRes, clusRes, centRes] = await Promise.all([
                 attendanceQuery,
                 offeringQuery,
-                supabase.from('regions').select('id', { count: 'exact' }),
-                supabase.from('clusters').select('id', { count: 'exact' }),
-                supabase.from('centers').select('id', { count: 'exact' })
+                regionsCountQuery,
+                clustersCountQuery,
+                centersCountQuery
             ])
 
             // Robust calculation for attendance

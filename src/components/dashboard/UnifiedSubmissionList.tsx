@@ -32,13 +32,28 @@ export default function UnifiedSubmissionList({
 
     useEffect(() => {
         async function fetchData() {
-            setLoading(true)
+            // 1. Fetch Setting & Mapping Metadata
+            const { data: { user } } = await supabase.auth.getUser()
+            const { data: profile } = await supabase.from('profiles').select('region_id, cluster_id').eq('id', user?.id).single()
 
-            // 1. Fetch Mapping Metadata
+            let centerQuery = supabase.from('centers').select('id, name')
+            let clusterQuery = supabase.from('clusters').select('id, name')
+
+            // Apply scoping to metadata fetches
+            if (role === 'region_admin' && profile?.region_id) {
+                clusterQuery = clusterQuery.eq('region_id', profile.region_id)
+                const { data: rClusters } = await supabase.from('clusters').select('id').eq('region_id', profile.region_id)
+                const rClusterIds = rClusters?.map(cl => cl.id) || []
+                centerQuery = centerQuery.in('cluster_id', rClusterIds)
+            } else if (role === 'cluster_admin' && profile?.cluster_id) {
+                clusterQuery = clusterQuery.eq('id', profile.cluster_id)
+                centerQuery = centerQuery.eq('cluster_id', profile.cluster_id)
+            }
+
             const [{ data: sTypes }, { data: cData }, { data: clData }] = await Promise.all([
                 supabase.from('service_types').select('id, name'),
-                supabase.from('centers').select('id, name'),
-                supabase.from('clusters').select('id, name')
+                centerQuery,
+                clusterQuery
             ])
 
             const sMap = (sTypes || []).reduce((acc, curr: any) => ({ ...acc, [curr.id]: curr.name }), {})
@@ -55,33 +70,35 @@ export default function UnifiedSubmissionList({
             if (centerId && role === 'center_rep') {
                 attQuery = attQuery.eq('center_id', centerId).eq('submission_level', 'center')
                 offQuery = offQuery.eq('center_id', centerId).eq('submission_level', 'center')
-            } else if (role === 'cluster_admin') {
-                const { data: { user } } = await supabase.auth.getUser()
-                const { data: profile } = await supabase.from('profiles').select('cluster_id').eq('id', user?.id).single()
-                if (profile?.cluster_id) {
-                    const { data: clusterCenters } = await supabase.from('centers').select('id').eq('cluster_id', profile.cluster_id)
-                    const centerIds = clusterCenters?.map(c => c.id) || []
-                    attQuery = attQuery.or(`cluster_id.eq.${profile.cluster_id},center_id.in.(${centerIds.join(',')})`)
-                    offQuery = offQuery.or(`cluster_id.eq.${profile.cluster_id},center_id.in.(${centerIds.join(',')})`)
+            } else if (role === 'cluster_admin' && profile?.cluster_id) {
+                const centerIds = cData?.map(c => c.id) || []
+
+                // Construct safe filter: submissions belonging to this cluster OR its centers
+                let filters = [`cluster_id.eq.${profile.cluster_id}`]
+                if (centerIds.length > 0) {
+                    filters.push(`center_id.in.(${centerIds.join(',')})`)
                 }
-            } else if (role === 'region_admin') {
-                const { data: { user } } = await supabase.auth.getUser()
-                const { data: profile } = await supabase.from('profiles').select('region_id').eq('id', user?.id).single()
-                if (profile?.region_id) {
-                    const { data: regionClusters } = await supabase.from('clusters').select('id').eq('region_id', profile.region_id)
-                    const clusterIds = regionClusters?.map(cl => cl.id) || []
-                    const { data: regionCenters } = await supabase.from('centers').select('id').in('cluster_id', clusterIds)
-                    const centerIds = regionCenters?.map(c => c.id) || []
+                const combined = filters.join(',')
 
-                    // Filter by identifying if the submission belongs to the region via cluster or center
-                    if (clusterIds.length > 0 || centerIds.length > 0) {
-                        const clusterFilter = clusterIds.length > 0 ? `cluster_id.in.(${clusterIds.join(',')})` : ''
-                        const centerFilter = centerIds.length > 0 ? `center_id.in.(${centerIds.join(',')})` : ''
-                        const combinedFilter = [clusterFilter, centerFilter].filter(Boolean).join(',')
+                attQuery = attQuery.or(combined)
+                offQuery = offQuery.or(combined)
+            } else if (role === 'region_admin' && profile?.region_id) {
+                const clusterIds = clData?.map(cl => cl.id) || []
+                const centerIds = cData?.map(c => c.id) || []
 
-                        attQuery = attQuery.or(combinedFilter)
-                        offQuery = offQuery.or(combinedFilter)
-                    }
+                // Filter by identifying if the submission belongs to the region via its clusters or centers
+                let filters = []
+                if (clusterIds.length > 0) filters.push(`cluster_id.in.(${clusterIds.join(',')})`)
+                if (centerIds.length > 0) filters.push(`center_id.in.(${centerIds.join(',')})`)
+
+                if (filters.length > 0) {
+                    const combinedFilter = filters.join(',')
+                    attQuery = attQuery.or(combinedFilter)
+                    offQuery = offQuery.or(combinedFilter)
+                } else {
+                    // No data in scope
+                    attQuery = attQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+                    offQuery = offQuery.eq('id', '00000000-0000-0000-0000-000000000000')
                 }
             }
 

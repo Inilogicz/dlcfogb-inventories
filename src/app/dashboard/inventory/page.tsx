@@ -30,10 +30,24 @@ export default function InventoryPage() {
             setProfile(prof)
 
             if (prof?.role === 'super_admin' || prof?.role === 'region_admin' || prof?.role === 'cluster_admin') {
+                let clusterQuery = supabase.from('clusters').select('id, name, region_id')
+                let centerQuery = supabase.from('centers').select('id, name, cluster_id')
+
+                if (prof.role === 'region_admin' && prof.region_id) {
+                    clusterQuery = clusterQuery.eq('region_id', prof.region_id)
+                    const { data: regionClusters } = await supabase.from('clusters').select('id').eq('region_id', prof.region_id)
+                    const clIds = regionClusters?.map(cl => cl.id) || []
+                    centerQuery = centerQuery.in('cluster_id', clIds)
+                } else if (prof.role === 'cluster_admin' && prof.cluster_id) {
+                    clusterQuery = clusterQuery.eq('id', prof.cluster_id)
+                    centerQuery = centerQuery.eq('cluster_id', prof.cluster_id)
+                }
+
                 const queries: Promise<any>[] = [
-                    supabase.from('clusters').select('id, name, region_id').order('name') as any,
-                    supabase.from('centers').select('id, name, cluster_id').order('name') as any
+                    clusterQuery.order('name') as any,
+                    centerQuery.order('name') as any
                 ]
+
                 if (prof?.role === 'super_admin') {
                     queries.push(supabase.from('regions').select('id, name').order('name') as any)
                 }

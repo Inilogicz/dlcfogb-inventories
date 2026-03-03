@@ -289,10 +289,30 @@ export default function CenterManager() {
 
     async function fetchData() {
         setFetching(true)
+
+        // 1. Get user profile for scoping
+        const { data: { user } } = await supabase.auth.getUser()
+        const { data: profile } = await supabase.from('profiles').select('role, region_id, cluster_id').eq('id', user?.id).single()
+
+        let centersQuery = supabase.from('centers').select('*, clusters(name)').order('name')
+        let clustersQuery = supabase.from('clusters').select('*').order('name')
+
+        if (profile?.role === 'region_admin' && profile.region_id) {
+            clustersQuery = clustersQuery.eq('region_id', profile.region_id)
+            // For centers, we need to explicitly filter by clusters in that region
+            const { data: rClusters } = await supabase.from('clusters').select('id').eq('region_id', profile.region_id)
+            const rClusterIds = rClusters?.map(cl => cl.id) || []
+            centersQuery = centersQuery.in('cluster_id', rClusterIds)
+        } else if (profile?.role === 'cluster_admin' && profile.cluster_id) {
+            clustersQuery = clustersQuery.eq('id', profile.cluster_id)
+            centersQuery = centersQuery.eq('cluster_id', profile.cluster_id)
+        }
+
         const [centersRes, clustersRes] = await Promise.all([
-            supabase.from('centers').select('*, clusters(name)').order('name'),
-            supabase.from('clusters').select('*').order('name')
+            centersQuery,
+            clustersQuery
         ])
+
         if (centersRes.data) setCenters(centersRes.data as any)
         if (clustersRes.data) setClusters(clustersRes.data)
         setFetching(false)

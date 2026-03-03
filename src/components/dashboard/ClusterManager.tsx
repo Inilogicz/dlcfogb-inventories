@@ -281,8 +281,18 @@ export default function ClusterManager() {
     }
 
     async function fetchClusters() {
+        let clusterQuery = supabase.from('clusters').select('*').order('name')
+
+        // Scope clusters to region if administrator is restricted
+        const { data: { user } } = await supabase.auth.getUser()
+        const { data: profile } = await supabase.from('profiles').select('role, region_id').eq('id', user?.id).single()
+
+        if (profile?.role === 'region_admin' && profile.region_id) {
+            clusterQuery = clusterQuery.eq('region_id', profile.region_id)
+        }
+
         const [{ data }, { data: centers }] = await Promise.all([
-            supabase.from('clusters').select('*').order('name'),
+            clusterQuery,
             supabase.from('centers').select('id, cluster_id')
         ])
         if (data) setClusters(data)

@@ -1,14 +1,37 @@
-import { createAdminClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { handleError, AppError } from "@/lib/api-error"
 
 export async function GET() {
     try {
-        const supabase = await createAdminClient()
-        const { data: profiles, error } = await supabase
+        const supabase = await createClient()
+        const adminSupabase = await createAdminClient()
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new AppError("Unauthorized", 401)
+
+        const { data: profile } = await adminSupabase
             .from('profiles')
-            .select('*')
-            .order('full_name')
+            .select('role, region_id, cluster_id')
+            .eq('id', user.id)
+            .single()
+
+        if (!profile) throw new AppError("Profile not found", 404)
+
+        let query = adminSupabase.from('profiles').select('*').order('full_name')
+
+        if (profile.role === 'region_admin' && profile.region_id) {
+            query = query.eq('region_id', profile.region_id)
+        } else if (profile.role === 'cluster_admin' && profile.cluster_id) {
+            query = query.eq('cluster_id', profile.cluster_id)
+        } else if (profile.role === 'center_rep') {
+            query = query.eq('id', user.id)
+        } else if (profile.role !== 'super_admin') {
+            // Other non-admin roles shouldn't be listing all users
+            query = query.eq('id', user.id)
+        }
+
+        const { data: profiles, error } = await query
 
         if (error) throw error
         return NextResponse.json(profiles)
@@ -30,7 +53,16 @@ export async function POST(request: Request) {
             user_metadata: { full_name }
         })
 
-        if (authError) throw authError
+        if (authError) {
+            if (authError.message?.toLowerCase().includes("already") && authError.message?.toLowerCase().includes("registered")) {
+                throw new AppError("A user with this email has already been registered", 400, authError)
+            }
+            if (authError.message?.toLowerCase().includes("already") && authError.message?.toLowerCase().includes("exists")) {
+                throw new AppError("A user with this email has already been registered", 400, authError)
+            }
+            throw authError
+        }
+
         if (!user) throw new AppError("Failed to create user", 500)
 
         // 2. Update the Profile (it's created by trigger, but we need to set role/cluster/center)
@@ -49,9 +81,6 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ user })
     } catch (error: any) {
-        if (error.message?.includes("User already registered")) {
-            return handleError(new AppError("Account created already", 400, error))
-        }
         return handleError(error)
     }
 }
