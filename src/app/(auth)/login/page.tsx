@@ -17,7 +17,7 @@ export default function LoginPage() {
                     <Image src="/dlcf-logo.png" alt="dlcf-logo" width={50} height={50} />
                     <div>
                         <p className="text-white font-bold text-lg leading-tight">DLCF Oyo South</p>
-                        <p className="text-white/40 text-xs font-medium">Attendance & Inventory Portal</p>
+                        <p className="text-white/40 text-xs font-medium">Raising Saintly Scholars</p>
                     </div>
                 </div>
 

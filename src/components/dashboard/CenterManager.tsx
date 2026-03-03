@@ -10,10 +10,10 @@ import {
 } from "lucide-react"
 
 // ----- Create Center Modal -----
-function CreateCenterModal({ clusters, onClose, onCreated }: { clusters: Cluster[], onClose: () => void, onCreated: () => void }) {
+function CreateCenterModal({ clusters, onClose, onCreated, userClusterId }: { clusters: Cluster[], onClose: () => void, onCreated: () => void, userClusterId?: string | null }) {
     const [step, setStep] = useState<1 | 2>(1)
     const [name, setName] = useState("")
-    const [selectedClusterId, setSelectedClusterId] = useState("")
+    const [selectedClusterId, setSelectedClusterId] = useState(userClusterId || "")
     const [repEmail, setRepEmail] = useState("")
     const [repPassword, setRepPassword] = useState("")
     const [loading, setLoading] = useState(false)
@@ -129,7 +129,8 @@ function CreateCenterModal({ clusters, onClose, onCreated }: { clusters: Cluster
                                     <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                                     <select
                                         required
-                                        className="w-full pl-10 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-teal-500/25 focus:border-teal-300 focus:bg-white transition-all appearance-none cursor-pointer"
+                                        disabled={!!userClusterId}
+                                        className="w-full pl-10 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-teal-500/25 focus:border-teal-300 focus:bg-white transition-all appearance-none cursor-pointer disabled:opacity-60"
                                         value={selectedClusterId}
                                         onChange={(e) => setSelectedClusterId(e.target.value)}
                                     >
@@ -283,6 +284,7 @@ export default function CenterManager() {
     const [deleteTarget, setDeleteTarget] = useState<Center | null>(null)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
+    const [userProfile, setUserProfile] = useState<{ role: string, region_id: string | null, cluster_id: string | null } | null>(null)
     const supabase = createClient()
 
     useEffect(() => { fetchData() }, [])
@@ -293,6 +295,7 @@ export default function CenterManager() {
         // 1. Get user profile for scoping
         const { data: { user } } = await supabase.auth.getUser()
         const { data: profile } = await supabase.from('profiles').select('role, region_id, cluster_id').eq('id', user?.id).single()
+        setUserProfile(profile as any)
 
         let centersQuery = supabase.from('centers').select('*, clusters(name)').order('name')
         let clustersQuery = supabase.from('clusters').select('*').order('name')
@@ -436,7 +439,7 @@ export default function CenterManager() {
             )}
 
             {/* Modals */}
-            {creating && <CreateCenterModal clusters={clusters} onClose={() => setCreating(false)} onCreated={handleCreated} />}
+            {creating && <CreateCenterModal clusters={clusters} onClose={() => setCreating(false)} onCreated={handleCreated} userClusterId={userProfile?.cluster_id} />}
             {deleteTarget && <DeleteCenterModal center={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={handleDeleted} />}
         </div>
     )
