@@ -106,6 +106,7 @@ export default function UnifiedSubmissionList({
                 collated[key] = { ...collated[key], offering: off }
             })
 
+            console.log('--- Submissions Data fetched ---', Object.values(collated));
             setUnifiedData(Object.values(collated))
             setLoading(false)
         }
@@ -154,36 +155,42 @@ export default function UnifiedSubmissionList({
         }
 
         return (
-            <tr key={idx} className="group hover:bg-brand-blue/[0.02] transition-colors cursor-pointer" onClick={() => setSelectedItem({ attendance, offering, typeName, locationName, level })}>
-                <td className="px-6 py-4 whitespace-nowrap">
+            <tr key={idx} className="group hover:bg-slate-50 transition-all cursor-pointer border-b border-transparent hover:border-slate-100" onClick={() => setSelectedItem({ attendance, offering, typeName, locationName, level })}>
+                <td className="px-8 py-5 whitespace-nowrap">
                     <div className="flex flex-col">
-                        <span className="text-sm font-bold text-gray-900">{typeName}</span>
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <span className="text-sm font-black text-slate-800">{typeName}</span>
+                        <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1 mt-0.5 uppercase tracking-tighter">
                             <Calendar className="w-3 h-3" />
                             {new Date(date).toLocaleDateString(undefined, { dateStyle: 'medium' })}
                         </span>
                     </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-8 py-5 whitespace-nowrap">
                     <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-800">{locationName}</span>
-                        <span className={`text-[10px] font-bold uppercase ${level === 'center' ? 'text-brand-blue' : level === 'cluster' ? 'text-blue-600' : 'text-orange-600'}`}>
-                            {level === 'center' ? 'Center' : level === 'cluster' ? 'Cluster Combined' : 'General Combined'}
+                        <span className="text-sm font-bold text-gray-700">{locationName}</span>
+                        <span className={`text-[9px] font-black uppercase tracking-widest mt-1.5 px-2 py-0.5 rounded-md w-fit ${level === 'center' ? 'bg-slate-100 text-slate-600' : level === 'cluster' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                            {level === 'center' ? 'Center' : level === 'cluster' ? 'Cluster' : 'General'}
                         </span>
                     </div>
                 </td>
-                <td className="px-6 py-4 text-center">
-                    <div className="inline-flex items-center justify-center bg-blue-50 text-brand-blue px-3 py-1 rounded-full font-black text-sm border border-blue-100">
-                        {item.attendance?.grand_total || "—"}
+                <td className="px-8 py-5 text-center">
+                    <div className="inline-flex items-center justify-center bg-slate-50 text-slate-800 px-5 py-2.5 rounded-2xl font-black text-sm border border-slate-100 group-hover:bg-amber-50 group-hover:text-amber-700 group-hover:border-amber-100 transition-all shadow-sm">
+                        {item.attendance ? (
+                            (item.attendance.grand_total > 0 ? item.attendance.grand_total :
+                                (item.attendance.adult_brothers + item.attendance.adult_sisters +
+                                    item.attendance.youth_brothers + item.attendance.youth_sisters +
+                                    item.attendance.children_brothers + item.attendance.children_sisters +
+                                    item.attendance.visitors_brothers + item.attendance.visitors_sisters)).toLocaleString()
+                        ) : "—"}
                     </div>
                 </td>
-                <td className="px-6 py-4 text-right">
-                    <span className="text-sm font-black text-green-700">
+                <td className="px-8 py-5 text-right">
+                    <span className="text-sm font-black text-slate-800 group-hover:text-amber-600 transition-colors">
                         {item.offering ? `₦${Number(item.offering.amount_100).toLocaleString()}` : "—"}
                     </span>
                 </td>
-                <td className="px-6 py-4 text-right">
-                    <button className="p-2 text-gray-400 hover:text-brand-orange hover:bg-brand-orange/5 rounded-full transition-all group-hover:scale-110">
+                <td className="px-8 py-5 text-right">
+                    <button className="p-3 text-slate-300 hover:text-amber-600 hover:bg-amber-50 rounded-2xl transition-all group-hover:scale-105 active:scale-90 border border-transparent hover:border-amber-100">
                         <Eye className="w-5 h-5" />
                     </button>
                 </td>
@@ -194,7 +201,7 @@ export default function UnifiedSubmissionList({
     if (loading) {
         return (
             <div className="flex justify-center p-12">
-                <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
+                <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
             </div>
         )
     }
@@ -209,7 +216,7 @@ export default function UnifiedSubmissionList({
                         <input
                             type="text"
                             placeholder="Search records..."
-                            className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-blue/20"
+                            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-4 focus:ring-amber-500/5 focus:border-amber-500 transition-all font-medium"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -217,16 +224,16 @@ export default function UnifiedSubmissionList({
                 </div>
 
                 <div className="flex gap-4 items-center">
-                    <div className="flex bg-gray-50 p-1 rounded-lg border border-gray-100">
+                    <div className="flex bg-slate-100/50 p-1 rounded-lg border border-slate-200/50">
                         <button
                             onClick={() => setGroupByMonth(false)}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${!groupByMonth ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 py-1.5 text-[10px] font-black tracking-widest rounded-md transition-all ${!groupByMonth ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             LIST
                         </button>
                         <button
                             onClick={() => setGroupByMonth(true)}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${groupByMonth ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-3 py-1.5 text-[10px] font-black tracking-widest rounded-md transition-all ${groupByMonth ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             MONTHS
                         </button>
@@ -234,7 +241,7 @@ export default function UnifiedSubmissionList({
 
                     <div className="flex items-center gap-2">
                         <select
-                            className="text-xs font-bold px-3 py-2 border rounded-lg bg-white outline-none cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="text-[10px] font-black tracking-widest px-3 py-2 border border-slate-200 rounded-lg bg-white outline-none cursor-pointer hover:bg-slate-50 transition-colors uppercase"
                             value={sortBy}
                             onChange={(e) => setSortBy(e.target.value as any)}
                         >
@@ -245,36 +252,36 @@ export default function UnifiedSubmissionList({
 
                         <button
                             onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                            className="p-2 border rounded-lg hover:bg-gray-50 transition-colors"
+                            className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                             title={sortOrder === 'asc' ? "Ascending" : "Descending"}
                         >
-                            <ArrowUpDown className="w-4 h-4 text-gray-500" />
+                            <ArrowUpDown className="w-4 h-4 text-slate-500" />
                         </button>
                     </div>
                 </div>
             </div>
 
             {sortedData.length === 0 ? (
-                <div className="bg-white p-12 rounded-2xl border border-gray-100 text-center space-y-4 shadow-sm">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto">
-                        <Calendar className="w-8 h-8 text-gray-300" />
+                <div className="bg-white p-20 rounded-[3rem] border border-gray-100 text-center space-y-6 shadow-xl shadow-gray-200/50">
+                    <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto ring-8 ring-gray-50/50">
+                        <Calendar className="w-10 h-10 text-gray-200" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-gray-900">No records found</h3>
-                        <p className="text-gray-500 max-w-sm mx-auto">Try adjusting your filters or search terms.</p>
+                        <h3 className="text-2xl font-black text-slate-800">No records found</h3>
+                        <p className="text-gray-400 max-w-sm mx-auto font-medium">Capture your first service session record to start tracking attendance and offerings.</p>
                     </div>
                 </div>
             ) : (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-md overflow-hidden">
+                <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl shadow-gray-200/50 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-brand-blue/5 border-b border-gray-100 font-bold text-gray-700">
-                                    <th className="px-6 py-4 text-xs uppercase tracking-wider font-black">Service Detail</th>
-                                    <th className="px-6 py-4 text-xs uppercase tracking-wider font-black">Location</th>
-                                    <th className="px-6 py-4 text-xs uppercase tracking-wider text-center font-black">Attendance</th>
-                                    <th className="px-6 py-4 text-xs uppercase tracking-wider text-right font-black">Offering (100%)</th>
-                                    <th className="px-6 py-4 text-xs uppercase tracking-wider text-right font-black">Actions</th>
+                                <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-400">
+                                    <th className="px-8 py-5 text-[9px] md:text-[10px] uppercase tracking-[0.2em] font-black">Service Detail</th>
+                                    <th className="px-8 py-5 text-[9px] md:text-[10px] uppercase tracking-[0.2em] font-black">Location</th>
+                                    <th className="px-8 py-5 text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-center font-black">Attendance</th>
+                                    <th className="px-8 py-5 text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-right font-black">Offering (100%)</th>
+                                    <th className="px-8 py-5 text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-right font-black">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -289,8 +296,8 @@ export default function UnifiedSubmissionList({
                                         })
                                         return Object.entries(grouped).map(([month, items]) => (
                                             <React.Fragment key={month}>
-                                                <tr className="bg-gray-50/80">
-                                                    <td colSpan={5} className="px-6 py-2 text-[10px] font-black text-brand-blue uppercase tracking-widest">{month}</td>
+                                                <tr className="bg-slate-50/30">
+                                                    <td colSpan={5} className="px-8 py-3 text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{month}</td>
                                                 </tr>
                                                 {items.map((item, idx) => renderRow(item, idx))}
                                             </React.Fragment>
@@ -307,22 +314,22 @@ export default function UnifiedSubmissionList({
                     {totalPages > 1 && (
                         <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
                             <p className="text-xs text-gray-500 font-medium">
-                                Showing <span className="text-gray-900 font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-gray-900 font-bold">{Math.min(currentPage * itemsPerPage, sortedData.length)}</span> of <span className="text-gray-900 font-bold">{sortedData.length}</span> results
+                                Showing <span className="text-slate-800 font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-slate-800 font-bold">{Math.min(currentPage * itemsPerPage, sortedData.length)}</span> of <span className="text-slate-800 font-bold">{sortedData.length}</span> results
                             </p>
                             <div className="flex gap-2">
                                 <button
                                     disabled={currentPage === 1}
                                     onClick={() => setCurrentPage(prev => prev - 1)}
-                                    className="p-2 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                                    className="p-2 border border-slate-200 rounded bg-white hover:bg-slate-50 disabled:opacity-50 transition-colors"
                                 >
-                                    <ChevronLeft className="w-4 h-4" />
+                                    <ChevronLeft className="w-4 h-4 text-slate-400" />
                                 </button>
                                 <div className="flex gap-1 items-center">
                                     {[...Array(totalPages)].map((_, i) => (
                                         <button
                                             key={i}
                                             onClick={() => setCurrentPage(i + 1)}
-                                            className={`w-8 h-8 rounded text-xs font-bold flex items-center justify-center transition-all ${currentPage === i + 1 ? 'bg-brand-blue text-white shadow-sm' : 'hover:bg-gray-200 text-gray-600'}`}
+                                            className={`w-8 h-8 rounded text-[10px] font-black flex items-center justify-center transition-all ${currentPage === i + 1 ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200' : 'hover:bg-slate-200 text-slate-500'}`}
                                         >
                                             {i + 1}
                                         </button>
@@ -331,9 +338,9 @@ export default function UnifiedSubmissionList({
                                 <button
                                     disabled={currentPage === totalPages}
                                     onClick={() => setCurrentPage(prev => prev + 1)}
-                                    className="p-2 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                                    className="p-2 border border-slate-200 rounded bg-white hover:bg-slate-50 disabled:opacity-50 transition-colors"
                                 >
-                                    <ChevronRight className="w-4 h-4" />
+                                    <ChevronRight className="w-4 h-4 text-slate-400" />
                                 </button>
                             </div>
                         </div>

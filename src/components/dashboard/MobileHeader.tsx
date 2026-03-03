@@ -89,8 +89,6 @@ export default function MobileHeader({ role, fullName, initials, roleLabel }: Mo
                 </div>
             </div>
 
-            {/* Push content down for mobile topbar */}
-            <div className="lg:hidden h-[57px] w-0 flex-shrink-0" />
         </>
     )
 }

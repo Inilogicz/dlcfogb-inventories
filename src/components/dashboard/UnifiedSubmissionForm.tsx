@@ -3,17 +3,23 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { ServiceType, Center, Cluster } from "@/types/database"
-import { Loader2, Plus, Users, PhilippinePeso as Naira, Calendar, Building2, Globe, MapPin } from "lucide-react"
+import { Loader2, Plus, Users, PhilippinePeso as Naira, Calendar, Building2, Globe, MapPin, ChevronRight, CheckCircle2 } from "lucide-react"
+
+interface UnifiedSubmissionFormProps {
+    centerId?: string | null
+    clusterId?: string | null
+    role: string
+    onSuccess?: () => void
+    onCancel?: () => void
+}
 
 export default function UnifiedSubmissionForm({
     centerId,
     clusterId,
-    role
-}: {
-    centerId?: string | null,
-    clusterId?: string | null,
-    role: string
-}) {
+    role,
+    onSuccess,
+    onCancel
+}: UnifiedSubmissionFormProps) {
     const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
     const [centers, setCenters] = useState<Center[]>([])
     const [clusters, setClusters] = useState<Cluster[]>([])
@@ -77,7 +83,6 @@ export default function UnifiedSubmissionForm({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        // Validation based on scope
         if (scope === 'center' && !selectedCenter) {
             setMessage({ type: 'error', text: "Please select a center." })
             return
@@ -106,7 +111,6 @@ export default function UnifiedSubmissionForm({
             visitors_sisters: visitorsSisters
         }
 
-        // 1. Submit Attendance
         const { error: attError } = await supabase
             .from('attendance_submissions')
             .insert(payload_att)
@@ -117,7 +121,6 @@ export default function UnifiedSubmissionForm({
             return
         }
 
-        // 2. Submit Offering
         const { error: offError } = await supabase
             .from('offering_submissions')
             .insert({
@@ -135,37 +138,57 @@ export default function UnifiedSubmissionForm({
             return
         }
 
-        setMessage({ type: 'success', text: "Combined service data submitted successfully!" })
-
-        // Reset form
-        setAdultBrothers(0)
-        setAdultSisters(0)
-        setYouthBrothers(0)
-        setYouthSisters(0)
-        setChildrenBrothers(0)
-        setChildrenSisters(0)
-        setVisitorsBrothers(0)
-        setVisitorsSisters(0)
-        setAmount(0)
-
+        setMessage({ type: 'success', text: "Service data recorded successfully!" })
         setLoading(false)
+
+        if (onSuccess) {
+            setTimeout(onSuccess, 1500)
+        }
     }
 
+    const attendanceGroups = [
+        {
+            title: "Adults",
+            fields: [
+                { label: "Brothers", val: adultBrothers, set: setAdultBrothers },
+                { label: "Sisters", val: adultSisters, set: setAdultSisters },
+            ]
+        },
+        {
+            title: "Youths",
+            fields: [
+                { label: "Brothers", val: youthBrothers, set: setYouthBrothers },
+                { label: "Sisters", val: youthSisters, set: setYouthSisters },
+            ]
+        },
+        {
+            title: "Children",
+            fields: [
+                { label: "Brothers", val: childrenBrothers, set: setChildrenBrothers },
+                { label: "Sisters", val: childrenSisters, set: setChildrenSisters },
+            ]
+        },
+        {
+            title: "Visitors",
+            fields: [
+                { label: "Brothers", val: visitorsBrothers, set: setVisitorsBrothers },
+                { label: "Sisters", val: visitorsSisters, set: setVisitorsSisters },
+            ]
+        }
+    ]
+
     return (
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm space-y-8 max-w-4xl animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b pb-4 gap-4">
-                <h2 className="text-xl font-bold text-brand-blue flex items-center gap-2">
-                    <Plus className="w-5 h-5 text-brand-orange" />
-                    New Submission Profile
-                </h2>
-                <div className="flex flex-wrap gap-2">
+        <form onSubmit={handleSubmit} className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Scope & Basic Info */}
+            <div className="space-y-6">
+                <div className="flex flex-wrap items-center gap-2 p-1 md:p-1.5 bg-slate-100/50 rounded-2xl w-full sm:w-fit border border-slate-200/50 shadow-sm">
                     {role === 'super_admin' && (
                         <button
                             type="button"
                             onClick={() => setScope('general')}
-                            className={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-all border outline-none ${scope === 'general' ? 'bg-orange-600 text-white border-orange-600 shadow-md ring-2 ring-orange-100' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'}`}
+                            className={`flex-1 sm:flex-none px-4 md:px-5 py-2 md:py-2.5 rounded-xl text-[9px] md:text-[10px] font-black tracking-widest transition-all ${scope === 'general' ? 'bg-white text-slate-800 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                         >
-                            GENERAL COMBINED
+                            GENERAL
                         </button>
                     )}
                     {(role === 'super_admin' || role === 'cluster_admin') && (
@@ -175,202 +198,209 @@ export default function UnifiedSubmissionForm({
                                 setScope('cluster')
                                 if (role === 'cluster_admin' && clusterId) setSelectedCluster(clusterId)
                             }}
-                            className={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-all border outline-none ${scope === 'cluster' ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-100' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'}`}
+                            className={`flex-1 sm:flex-none px-4 md:px-5 py-2 md:py-2.5 rounded-xl text-[9px] md:text-[10px] font-black tracking-widest transition-all ${scope === 'cluster' ? 'bg-white text-slate-800 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                         >
-                            CLUSTER COMBINED
+                            CLUSTER
                         </button>
                     )}
                     <button
                         type="button"
                         onClick={() => setScope('center')}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-all border outline-none ${scope === 'center' ? 'bg-brand-blue text-white border-brand-blue shadow-md ring-2 ring-blue-50' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'}`}
+                        className={`flex-1 sm:flex-none px-4 md:px-5 py-2 md:py-2.5 rounded-xl text-[9px] md:text-[10px] font-black tracking-widest transition-all ${scope === 'center' ? 'bg-white text-slate-800 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                     >
-                        CENTER RECORD
+                        CENTER
                     </button>
                 </div>
-            </div>
 
-            {/* Header: Scope Selection (Dynamic) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                    {scope === 'center' && (
-                        <div className="animate-in slide-in-from-left-2 duration-300">
-                            <label className="text-sm font-semibold flex items-center gap-2 mb-1">
-                                <Building2 className="w-4 h-4 text-gray-400" />
-                                Reporting Center
-                            </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                        <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                            <Building2 className="w-3 h-3 text-brand-blue" />
+                            {scope.toUpperCase()} LOCATION
+                        </label>
+                        {scope === 'center' ? (
                             <select
                                 required
                                 disabled={role === 'center_rep' || fetchingData}
-                                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-blue/20 outline-none disabled:bg-gray-50"
+                                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-slate-950/5 transition-all outline-none appearance-none"
                                 value={selectedCenter}
                                 onChange={(e) => setSelectedCenter(e.target.value)}
                             >
-                                {role === 'center_rep' ? (
-                                    <option value={centerId || ""}>{centers.find(c => c.id === centerId)?.name || "Assigned Center"}</option>
-                                ) : (
-                                    <>
-                                        <option value="">Select Center</option>
-                                        {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </>
-                                )}
+                                <option value="">Select Center</option>
+                                {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
-                        </div>
-                    )}
-                    {scope === 'cluster' && (
-                        <div className="animate-in slide-in-from-left-2 duration-300">
-                            <label className="text-sm font-semibold flex items-center gap-2 text-blue-600 mb-1">
-                                <MapPin className="w-4 h-4" />
-                                Target Cluster
-                            </label>
+                        ) : scope === 'cluster' ? (
                             <select
                                 required
                                 disabled={role === 'cluster_admin' || fetchingData}
-                                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-600/20 outline-none disabled:bg-gray-50"
+                                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-slate-950/5 transition-all outline-none appearance-none"
                                 value={selectedCluster}
                                 onChange={(e) => setSelectedCluster(e.target.value)}
                             >
-                                {role === 'cluster_admin' ? (
-                                    <option value={clusterId || ""}>{clusters.find(c => c.id === clusterId)?.name || "Your Cluster"}</option>
-                                ) : (
-                                    <>
-                                        <option value="">Select Cluster</option>
-                                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </>
-                                )}
+                                <option value="">Select Cluster</option>
+                                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        ) : (
+                            <div className="h-12 px-4 bg-slate-50 rounded-2xl flex items-center gap-2 text-slate-800 text-[10px] font-black border border-slate-200">
+                                <Globe className="w-4 h-4 text-slate-400" /> GENERAL COMBINED
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <Users className="w-3.5 h-3.5 text-amber-500" />
+                            SERVICE TYPE
+                        </label>
+                        <div className="relative">
+                            <select
+                                required
+                                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-slate-950/5 transition-all outline-none appearance-none"
+                                value={selectedType}
+                                onChange={(e) => setSelectedType(e.target.value)}
+                            >
+                                <option value="">Select Service</option>
+                                {serviceTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                         </div>
-                    )}
-                    {scope === 'general' && (
-                        <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg flex items-center gap-3 animate-in zoom-in-95 duration-300">
-                            <Globe className="w-5 h-5 text-orange-600" />
-                            <div className="flex flex-col">
-                                <span className="text-xs font-bold text-orange-700 uppercase">Organization Level</span>
-                                <span className="text-[10px] text-orange-600">General Combined Service</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                    </div>
 
-                <div className="space-y-2">
-                    <label className="text-sm font-semibold flex items-center gap-2 mb-1">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        Service Type
-                    </label>
-                    <select
-                        required
-                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-blue/20 outline-none"
-                        value={selectedType}
-                        onChange={(e) => setSelectedType(e.target.value)}
-                    >
-                        <option value="">Select Service</option>
-                        {serviceTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-sm font-semibold flex items-center gap-2 mb-1">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        Date
-                    </label>
-                    <input
-                        type="date"
-                        required
-                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-blue/20 outline-none"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                    />
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            SERVICE DATE
+                        </label>
+                        <input
+                            type="date"
+                            required
+                            className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-amber-500/5 transition-all outline-none"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* Section 1: Attendance */}
-            <div className="space-y-4 pt-4 border-t">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Attendance Breakdown</h3>
-                    <div className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-bold">8 CATEGORIES</div>
+            {/* Attendance Breakdown */}
+            <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-4 gap-4">
+                    <h3 className="text-[11px] md:text-[12px] font-black text-slate-800 flex items-center gap-3 tracking-widest uppercase">
+                        <div className="w-2 h-2 bg-amber-500 rounded-full" />
+                        Attendance Breakdown
+                    </h3>
+                    <div className="px-4 py-1.5 bg-amber-50 text-amber-700 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border border-amber-100">
+                        Total Souls: {grandTotal}
+                    </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {[
-                        { label: "Adult (Bro)", val: adultBrothers, set: setAdultBrothers },
-                        { label: "Adult (Sis)", val: adultSisters, set: setAdultSisters },
-                        { label: "Youth (Bro)", val: youthBrothers, set: setYouthBrothers },
-                        { label: "Youth (Sis)", val: youthSisters, set: setYouthSisters },
-                        { label: "Children (Bro)", val: childrenBrothers, set: setChildrenBrothers },
-                        { label: "Children (Sis)", val: childrenSisters, set: setChildrenSisters },
-                        { label: "Visitors (Bro)", val: visitorsBrothers, set: setVisitorsBrothers },
-                        { label: "Visitors (Sis)", val: visitorsSisters, set: setVisitorsSisters },
-                    ].map((field, idx) => (
-                        <div key={idx} className="space-y-1">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{field.label}</label>
-                            <input
-                                type="number"
-                                min="0"
-                                className="w-full px-3 py-2.5 border border-gray-100 bg-gray-50 rounded-xl text-sm font-bold text-gray-900 focus:border-brand-blue focus:bg-white outline-none transition-all focus:ring-2 focus:ring-brand-blue/10"
-                                value={field.val}
-                                onChange={(e) => field.set(parseInt(e.target.value) || 0)}
-                            />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    {attendanceGroups.map((group, idx) => (
+                        <div key={idx} className="bg-slate-50/50 p-4 md:p-6 rounded-[2rem] border border-slate-200/50 space-y-5 transition-all hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 group/card">
+                            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] px-1 group-hover/card:text-amber-600 transition-colors">{group.title}</h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                {group.fields.map((field, fIdx) => (
+                                    <div key={fIdx} className="space-y-1.5">
+                                        <div className="flex justify-between items-center px-1">
+                                            <label className="text-[8px] font-black text-slate-400 uppercase">{field.label}</label>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="w-full h-11 px-4 bg-white border border-slate-200 rounded-[1rem] text-sm font-black text-slate-800 focus:ring-4 focus:ring-amber-500/5 focus:border-amber-500 outline-none transition-all"
+                                            value={field.val}
+                                            onChange={(e) => field.set(parseInt(e.target.value) || 0)}
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ))}
                 </div>
-                <div className="p-5 bg-gradient-to-r from-brand-blue/5 to-brand-orange/5 rounded-2xl flex justify-between items-center border border-brand-blue/10">
-                    <div>
-                        <p className="text-[10px] font-black text-brand-blue/60 uppercase tracking-widest">Grand Total</p>
-                        <span className="font-bold text-brand-blue text-sm">All Categories Combined</span>
-                    </div>
-                    <span className="text-3xl font-black text-brand-orange">{grandTotal.toLocaleString()}</span>
-                </div>
             </div>
 
-            {/* Section 2: Offering */}
-            <div className="space-y-4 pt-4 border-t">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Financial Remittance</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Offering (100%)</label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">₦</span>
+            {/* Offering & Totals */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                <div className="bg-slate-50/50 p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-200/50 space-y-8">
+                    <h3 className="text-[10px] font-black text-slate-800 flex items-center gap-3 uppercase tracking-[0.3em]">
+                        <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                            <Naira className="w-4 h-4" />
+                        </div>
+                        Remittance Data
+                    </h3>
+
+                    <div className="space-y-3">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Offering (100%)</label>
+                        <div className="relative group/offering">
+                            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 font-black text-xl md:text-2xl group-focus-within/offering:text-amber-500 transition-colors">₦</span>
                             <input
                                 type="number"
                                 step="0.01"
                                 min="0"
                                 required
-                                className="w-full pl-8 pr-3 py-2.5 border border-gray-100 bg-gray-50 rounded-xl text-sm font-bold focus:border-green-500 focus:bg-white outline-none focus:ring-2 focus:ring-green-500/10 transition-all"
+                                className="w-full h-16 md:h-20 pl-14 pr-8 bg-white border border-slate-200 rounded-[1.2rem] md:rounded-[1.5rem] text-2xl md:text-3xl font-black text-slate-800 focus:ring-8 focus:ring-amber-500/5 focus:border-amber-500 transition-all outline-none shadow-sm"
                                 value={amount}
                                 onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
                             />
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-green-50 rounded-lg border border-green-100">
-                            <p className="text-[10px] text-green-700 font-bold uppercase">80% Remit</p>
-                            <p className="text-md font-bold text-green-800">₦{(amount * 0.8).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">80% Remit</p>
+                            <p className="text-sm md:text-md font-black text-slate-800">₦{(amount * 0.8).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         </div>
-                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                            <p className="text-[10px] text-brand-blue font-bold uppercase">20% Local</p>
-                            <p className="text-md font-bold text-brand-blue">₦{(amount * 0.2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">20% Local</p>
+                            <p className="text-sm md:text-md font-black text-slate-800">₦{(amount * 0.2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white shadow-xl shadow-slate-200/50 p-8 md:p-10 rounded-[2rem] md:rounded-[2.5rem] text-slate-800 space-y-6 relative overflow-hidden h-full min-h-[160px] md:min-h-[180px] flex flex-col justify-center border border-slate-200">
+                    <div className="absolute -right-8 -top-8 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl" />
+                    <div className="relative z-10">
+                        <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Grand Total Attendance</p>
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-4xl md:text-6xl font-black text-slate-800 tracking-tighter leading-none">{grandTotal.toLocaleString()}</h2>
+                            <div className="flex flex-col">
+                                <span className="text-xs font-black text-amber-600 tracking-widest uppercase">Souls</span>
+                                <span className="text-[9px] font-bold text-slate-300 uppercase">Recognized</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             {message && (
-                <div className={`p-4 rounded-xl text-sm font-semibold flex items-center gap-3 ${message.type === 'success'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                        : 'bg-red-50 text-red-700 border border-red-100'
+                <div className={`p-4 rounded-2xl text-sm font-bold flex items-center gap-3 animate-in zoom-in-95 ${message.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                    : 'bg-red-50 text-red-700 border border-red-100'
                     }`}>
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    {message.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <Loader2 className="w-5 h-5 animate-spin" />}
                     {message.text}
                 </div>
             )}
 
-            <button
-                type="submit"
-                disabled={loading || !selectedType || (scope === 'center' && !selectedCenter) || (scope === 'cluster' && !selectedCluster)}
-                className="w-full bg-brand-orange hover:bg-brand-orange/90 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-brand-orange/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 text-sm tracking-wide"
-            >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-                {loading ? "Collating & Submitting..." : `Submit ${scope.charAt(0).toUpperCase() + scope.slice(1)} Record`}
-            </button>
+            <div className="flex gap-4">
+                {onCancel && (
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="flex-shrink-0 px-6 md:px-8 py-4.5 rounded-[1.2rem] md:rounded-[1.5rem] text-[11px] font-black bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all outline-none uppercase tracking-widest"
+                    >
+                        CANCEL
+                    </button>
+                )}
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-amber-100 hover:bg-amber-200 text-amber-700 font-black py-4.5 rounded-[1.5rem] transition-all shadow-xl shadow-amber-200/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 text-[11px] tracking-[0.3em] uppercase border border-amber-200"
+                >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Submit Record"}
+                </button>
+            </div>
         </form>
     )
 }

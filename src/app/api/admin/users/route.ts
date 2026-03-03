@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { handleError, AppError } from "@/lib/api-error"
 
 export async function GET() {
     try {
@@ -12,7 +13,7 @@ export async function GET() {
         if (error) throw error
         return NextResponse.json(profiles)
     } catch (error: any) {
-        return NextResponse.json({ error: "Something went wrong" }, { status: 500 })
+        return handleError(error)
     }
 }
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
         })
 
         if (authError) throw authError
-        if (!user) throw new Error("Failed to create user")
+        if (!user) throw new AppError("Failed to create user", 500)
 
         // 2. Update the Profile (it's created by trigger, but we need to set role/cluster/center)
         const { error: profileError } = await supabase
@@ -48,11 +49,10 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ user })
     } catch (error: any) {
-        let msg = "Something went wrong"
         if (error.message?.includes("User already registered")) {
-            msg = "Account created already"
+            return handleError(new AppError("Account created already", 400, error))
         }
-        return NextResponse.json({ error: msg }, { status: 500 })
+        return handleError(error)
     }
 }
 
@@ -69,6 +69,6 @@ export async function PATCH(request: Request) {
         if (error) throw error
         return NextResponse.json({ success: true })
     } catch (error: any) {
-        return NextResponse.json({ error: "Something went wrong" }, { status: 500 })
+        return handleError(error)
     }
 }

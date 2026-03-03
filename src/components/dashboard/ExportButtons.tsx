@@ -2,8 +2,6 @@
 
 import { Download } from "lucide-react"
 import * as XLSX from 'xlsx'
-import { jsPDF } from "jspdf"
-import "jspdf-autotable"
 
 export default function ExportButtons({ data, filename, title }: { data: any[], filename: string, title: string }) {
 
@@ -14,17 +12,21 @@ export default function ExportButtons({ data, filename, title }: { data: any[], 
         XLSX.writeFile(workbook, `${filename}.xlsx`)
     }
 
-    const exportToPDF = () => {
+    const exportToPDF = async () => {
+        const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+            import('jspdf'),
+            import('jspdf-autotable')
+        ])
+
         const doc = new jsPDF()
         doc.text(title, 14, 15)
 
         const headers = Object.keys(data[0] || {})
         const rows = data.map(item => Object.values(item))
 
-        // @ts-ignore
-        doc.autoTable({
-            head: [headers],
-            body: rows,
+        autoTable(doc, {
+            head: [headers as any],
+            body: rows as any,
             startY: 20,
         })
 

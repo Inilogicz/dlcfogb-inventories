@@ -76,7 +76,7 @@ export default async function DashboardLayout({
                         <span className="text-xs text-gray-500 font-medium">Live</span>
                     </div>
                 </div>
-                <div className="p-4 md:p-8">
+                <div className="p-4 md:p-8 pt-20 md:pt-8">
                     {children}
                 </div>
             </main>
