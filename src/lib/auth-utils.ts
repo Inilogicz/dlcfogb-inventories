@@ -1,9 +1,10 @@
+import { cache } from 'react'
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Profile } from "@/types/database"
 import { logger } from "./logger"
 
-export async function getUserProfile() {
+export const getUserProfile = cache(async function () {
     logger.info("Starting getUserProfile")
     const supabase = await createClient()
     logger.info("Supabase client created")
@@ -56,7 +57,7 @@ export async function getUserProfile() {
     }
 
     return profile as Profile | null
-}
+})
 
 export async function requireUser() {
     const profile = await getUserProfile()

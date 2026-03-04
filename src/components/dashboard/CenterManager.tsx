@@ -20,12 +20,30 @@ function CreateCenterModal({ clusters, onClose, onCreated, userClusterId }: { cl
     const [error, setError] = useState<string | null>(null)
     const supabase = createClient()
 
+    // Sync selectedClusterId if userClusterId changes (e.g. after profile fetch)
+    useEffect(() => {
+        if (userClusterId && !selectedClusterId) {
+            setSelectedClusterId(userClusterId)
+        }
+    }, [userClusterId])
+
+    // Auto-select if there is only one cluster available
+    useEffect(() => {
+        if (clusters.length === 1 && !selectedClusterId && !userClusterId) {
+            setSelectedClusterId(clusters[0].id)
+        }
+    }, [clusters, selectedClusterId, userClusterId])
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (step === 1) {
-            if (!selectedClusterId) {
+            if (!selectedClusterId && !userClusterId) {
                 setError("Please select a cluster first")
                 return
+            }
+            // Use userClusterId if selectedClusterId is empty for some reason
+            if (!selectedClusterId && userClusterId) {
+                setSelectedClusterId(userClusterId)
             }
             setStep(2)
             setError(null)
@@ -127,16 +145,28 @@ function CreateCenterModal({ clusters, onClose, onCreated, userClusterId }: { cl
                                 <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Assign to Cluster</span>
                                 <div className="relative">
                                     <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    <select
-                                        required
-                                        disabled={!!userClusterId}
-                                        className="w-full pl-10 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-teal-500/25 focus:border-teal-300 focus:bg-white transition-all appearance-none cursor-pointer disabled:opacity-60"
-                                        value={selectedClusterId}
-                                        onChange={(e) => setSelectedClusterId(e.target.value)}
-                                    >
-                                        <option value="">Select a Cluster</option>
-                                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
+                                    {userClusterId ? (
+                                        <div className="w-full pl-10 pr-4 py-3.5 bg-teal-50 border border-teal-100 rounded-2xl text-sm font-bold text-teal-700">
+                                            {selectedClusterName || "Loading cluster..."}
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <select
+                                                required
+                                                className="w-full pl-10 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-teal-500/25 focus:border-teal-300 focus:bg-white transition-all appearance-none cursor-pointer"
+                                                value={selectedClusterId}
+                                                onChange={(e) => setSelectedClusterId(e.target.value)}
+                                            >
+                                                <option value="">{clusters.length === 0 ? "No Clusters Available" : "Select a Cluster"}</option>
+                                                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            </select>
+                                            {clusters.length === 0 && (
+                                                <p className="text-[10px] text-red-500 mt-1.5 ml-1 font-bold">
+                                                    You don't seem to have any clusters assigned to your profile.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </label>
 
@@ -294,7 +324,12 @@ export default function CenterManager() {
 
         // 1. Get user profile for scoping
         const { data: { user } } = await supabase.auth.getUser()
-        const { data: profile } = await supabase.from('profiles').select('role, region_id, cluster_id').eq('id', user?.id).single()
+        const { data: profile, error: profileError } = await supabase.from('profiles').select('role, region_id, cluster_id').eq('id', user?.id).single()
+
+        console.log("CenterManager diagnostic - User:", user?.id)
+        console.log("CenterManager diagnostic - Profile:", profile)
+        if (profileError) console.error("CenterManager diagnostic - Profile Error:", profileError)
+
         setUserProfile(profile as any)
 
         let centersQuery = supabase.from('centers').select('*, clusters(name)').order('name')
@@ -306,9 +341,13 @@ export default function CenterManager() {
             const { data: rClusters } = await supabase.from('clusters').select('id').eq('region_id', profile.region_id)
             const rClusterIds = rClusters?.map(cl => cl.id) || []
             centersQuery = centersQuery.in('cluster_id', rClusterIds)
-        } else if (profile?.role === 'cluster_admin' && profile.cluster_id) {
-            clustersQuery = clustersQuery.eq('id', profile.cluster_id)
-            centersQuery = centersQuery.eq('cluster_id', profile.cluster_id)
+        } else if (profile?.role === 'cluster_admin') {
+            if (profile.cluster_id) {
+                clustersQuery = clustersQuery.eq('id', profile.cluster_id)
+                centersQuery = centersQuery.eq('cluster_id', profile.cluster_id)
+            } else {
+                console.warn("CenterManager - Cluster Admin has no cluster_id assigned in profile.")
+            }
         }
 
         const [centersRes, clustersRes] = await Promise.all([
@@ -317,7 +356,12 @@ export default function CenterManager() {
         ])
 
         if (centersRes.data) setCenters(centersRes.data as any)
-        if (clustersRes.data) setClusters(clustersRes.data)
+        if (clustersRes.data) {
+            console.log("CenterManager diagnostic - Clusters fetched:", clustersRes.data.length)
+            setClusters(clustersRes.data)
+        } else if (clustersRes.error) {
+            console.error("CenterManager diagnostic - Clusters fetch error:", clustersRes.error)
+        }
         setFetching(false)
     }
 
@@ -369,10 +413,11 @@ export default function CenterManager() {
                 </div>
                 <button
                     onClick={() => setCreating(true)}
-                    className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-6 py-2.5 rounded-2xl transition-all shadow-lg shadow-teal-100 active:scale-[0.98]"
+                    disabled={fetching}
+                    className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-6 py-2.5 rounded-2xl transition-all shadow-lg shadow-teal-100 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Plus className="w-4 h-4" />
-                    Add Center
+                    {fetching ? "Loading..." : "Add Center"}
                 </button>
             </div>
 
