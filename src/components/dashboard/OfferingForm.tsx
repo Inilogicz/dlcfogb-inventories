@@ -8,7 +8,7 @@ export default function OfferingForm({ centerId }: { centerId: string }) {
     const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
     const [selectedType, setSelectedType] = useState("")
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-    const [amount, setAmount] = useState<number>(0)
+    const [amount, setAmount] = useState<number | string>("")
     const [loading, setLoading] = useState(false)
     const [fetchingServices, setFetchingServices] = useState(true)
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -29,8 +29,8 @@ export default function OfferingForm({ centerId }: { centerId: string }) {
         fetchServiceTypes()
     }, [])
 
-    const amount80 = amount * 0.8
-    const amount20 = amount * 0.2
+    const amount80 = Number(amount || 0) * 0.8
+    const amount20 = Number(amount || 0) * 0.2
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -43,7 +43,7 @@ export default function OfferingForm({ centerId }: { centerId: string }) {
                 center_id: centerId,
                 service_type_id: selectedType,
                 service_date: date,
-                amount_100: amount
+                amount_100: Number(amount || 0)
             })
 
         if (error) {
@@ -54,7 +54,7 @@ export default function OfferingForm({ centerId }: { centerId: string }) {
             }
         } else {
             setMessage({ type: 'success', text: "Offering submitted successfully!" })
-            setAmount(0)
+            setAmount("")
         }
         setLoading(false)
     }
@@ -109,7 +109,7 @@ export default function OfferingForm({ centerId }: { centerId: string }) {
                         required
                         className="w-full pl-8 pr-3 py-2 border rounded-md"
                         value={amount}
-                        onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => setAmount(e.target.value)}
                     />
                 </div>
             </div>

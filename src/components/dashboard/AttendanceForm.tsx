@@ -8,14 +8,14 @@ export default function AttendanceForm({ centerId }: { centerId: string }) {
     const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([])
     const [selectedType, setSelectedType] = useState("")
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-    const [adultBrothers, setAdultBrothers] = useState(0)
-    const [adultSisters, setAdultSisters] = useState(0)
-    const [youthBrothers, setYouthBrothers] = useState(0)
-    const [youthSisters, setYouthSisters] = useState(0)
-    const [childrenBrothers, setChildrenBrothers] = useState(0)
-    const [childrenSisters, setChildrenSisters] = useState(0)
-    const [visitorsBrothers, setVisitorsBrothers] = useState(0)
-    const [visitorsSisters, setVisitorsSisters] = useState(0)
+    const [adultBrothers, setAdultBrothers] = useState<number | string>("")
+    const [adultSisters, setAdultSisters] = useState<number | string>("")
+    const [youthBrothers, setYouthBrothers] = useState<number | string>("")
+    const [youthSisters, setYouthSisters] = useState<number | string>("")
+    const [childrenBrothers, setChildrenBrothers] = useState<number | string>("")
+    const [childrenSisters, setChildrenSisters] = useState<number | string>("")
+    const [visitorsBrothers, setVisitorsBrothers] = useState<number | string>("")
+    const [visitorsSisters, setVisitorsSisters] = useState<number | string>("")
     const [loading, setLoading] = useState(false)
     const [fetchingServices, setFetchingServices] = useState(true)
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -36,8 +36,10 @@ export default function AttendanceForm({ centerId }: { centerId: string }) {
         fetchServiceTypes()
     }, [])
 
-    const grandTotal = adultBrothers + adultSisters + youthBrothers + youthSisters +
-        childrenBrothers + childrenSisters + visitorsBrothers + visitorsSisters
+    const grandTotal = Number(adultBrothers || 0) + Number(adultSisters || 0) +
+        Number(youthBrothers || 0) + Number(youthSisters || 0) +
+        Number(childrenBrothers || 0) + Number(childrenSisters || 0) +
+        Number(visitorsBrothers || 0) + Number(visitorsSisters || 0)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -50,14 +52,14 @@ export default function AttendanceForm({ centerId }: { centerId: string }) {
                 center_id: centerId,
                 service_type_id: selectedType,
                 service_date: date,
-                adult_brothers: adultBrothers,
-                adult_sisters: adultSisters,
-                youth_brothers: youthBrothers,
-                youth_sisters: youthSisters,
-                children_brothers: childrenBrothers,
-                children_sisters: childrenSisters,
-                visitors_brothers: visitorsBrothers,
-                visitors_sisters: visitorsSisters
+                adult_brothers: Number(adultBrothers || 0),
+                adult_sisters: Number(adultSisters || 0),
+                youth_brothers: Number(youthBrothers || 0),
+                youth_sisters: Number(youthSisters || 0),
+                children_brothers: Number(childrenBrothers || 0),
+                children_sisters: Number(childrenSisters || 0),
+                visitors_brothers: Number(visitorsBrothers || 0),
+                visitors_sisters: Number(visitorsSisters || 0)
             })
 
         if (error) {
@@ -69,14 +71,14 @@ export default function AttendanceForm({ centerId }: { centerId: string }) {
         } else {
             setMessage({ type: 'success', text: "Attendance submitted successfully!" })
             // Reset form
-            setAdultBrothers(0)
-            setAdultSisters(0)
-            setYouthBrothers(0)
-            setYouthSisters(0)
-            setChildrenBrothers(0)
-            setChildrenSisters(0)
-            setVisitorsBrothers(0)
-            setVisitorsSisters(0)
+            setAdultBrothers("")
+            setAdultSisters("")
+            setYouthBrothers("")
+            setYouthSisters("")
+            setChildrenBrothers("")
+            setChildrenSisters("")
+            setVisitorsBrothers("")
+            setVisitorsSisters("")
         }
         setLoading(false)
     }
@@ -138,7 +140,7 @@ export default function AttendanceForm({ centerId }: { centerId: string }) {
                             min="0"
                             className="w-full px-3 py-2 border rounded-md"
                             value={field.val}
-                            onChange={(e) => field.set(parseInt(e.target.value) || 0)}
+                            onChange={(e) => field.set(e.target.value)}
                         />
                     </div>
                 ))}

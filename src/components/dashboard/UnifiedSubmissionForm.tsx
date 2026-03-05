@@ -32,17 +32,17 @@ export default function UnifiedSubmissionForm({
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
 
     // Attendance State
-    const [adultBrothers, setAdultBrothers] = useState(0)
-    const [adultSisters, setAdultSisters] = useState(0)
-    const [youthBrothers, setYouthBrothers] = useState(0)
-    const [youthSisters, setYouthSisters] = useState(0)
-    const [childrenBrothers, setChildrenBrothers] = useState(0)
-    const [childrenSisters, setChildrenSisters] = useState(0)
-    const [visitorsBrothers, setVisitorsBrothers] = useState(0)
-    const [visitorsSisters, setVisitorsSisters] = useState(0)
+    const [adultBrothers, setAdultBrothers] = useState<number | string>("")
+    const [adultSisters, setAdultSisters] = useState<number | string>("")
+    const [youthBrothers, setYouthBrothers] = useState<number | string>("")
+    const [youthSisters, setYouthSisters] = useState<number | string>("")
+    const [childrenBrothers, setChildrenBrothers] = useState<number | string>("")
+    const [childrenSisters, setChildrenSisters] = useState<number | string>("")
+    const [visitorsBrothers, setVisitorsBrothers] = useState<number | string>("")
+    const [visitorsSisters, setVisitorsSisters] = useState<number | string>("")
 
     // Offering State
-    const [amount, setAmount] = useState<number>(0)
+    const [amount, setAmount] = useState<number | string>("")
 
     const [loading, setLoading] = useState(false)
     const [fetchingData, setFetchingData] = useState(true)
@@ -77,8 +77,10 @@ export default function UnifiedSubmissionForm({
         fetchData()
     }, [role, clusterId, centerId])
 
-    const grandTotal = adultBrothers + adultSisters + youthBrothers + youthSisters +
-        childrenBrothers + childrenSisters + visitorsBrothers + visitorsSisters
+    const grandTotal = Number(adultBrothers || 0) + Number(adultSisters || 0) +
+        Number(youthBrothers || 0) + Number(youthSisters || 0) +
+        Number(childrenBrothers || 0) + Number(childrenSisters || 0) +
+        Number(visitorsBrothers || 0) + Number(visitorsSisters || 0)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -107,14 +109,14 @@ export default function UnifiedSubmissionForm({
             cluster_id: currentClusterId || (scope === 'cluster' ? selectedCluster : null),
             service_type_id: selectedType,
             service_date: date,
-            adult_brothers: adultBrothers,
-            adult_sisters: adultSisters,
-            youth_brothers: youthBrothers,
-            youth_sisters: youthSisters,
-            children_brothers: childrenBrothers,
-            children_sisters: childrenSisters,
-            visitors_brothers: visitorsBrothers,
-            visitors_sisters: visitorsSisters
+            adult_brothers: Number(adultBrothers || 0),
+            adult_sisters: Number(adultSisters || 0),
+            youth_brothers: Number(youthBrothers || 0),
+            youth_sisters: Number(youthSisters || 0),
+            children_brothers: Number(childrenBrothers || 0),
+            children_sisters: Number(childrenSisters || 0),
+            visitors_brothers: Number(visitorsBrothers || 0),
+            visitors_sisters: Number(visitorsSisters || 0)
         }
 
         const { error: attError } = await supabase
@@ -135,7 +137,7 @@ export default function UnifiedSubmissionForm({
                 cluster_id: currentClusterId || (scope === 'cluster' ? selectedCluster : null),
                 service_type_id: selectedType,
                 service_date: date,
-                amount_100: amount
+                amount_100: Number(amount || 0)
             })
 
         if (offError) {
@@ -314,7 +316,7 @@ export default function UnifiedSubmissionForm({
                                             min="0"
                                             className="w-full h-11 px-4 bg-white border border-slate-200 rounded-[1rem] text-sm font-black text-slate-800 focus:ring-4 focus:ring-amber-500/5 focus:border-amber-500 outline-none transition-all"
                                             value={field.val}
-                                            onChange={(e) => field.set(parseInt(e.target.value) || 0)}
+                                            onChange={(e) => field.set(e.target.value)}
                                             placeholder="0"
                                         />
                                     </div>
@@ -346,7 +348,7 @@ export default function UnifiedSubmissionForm({
                                 required
                                 className="w-full h-16 md:h-20 pl-14 pr-8 bg-white border border-slate-200 rounded-[1.2rem] md:rounded-[1.5rem] text-2xl md:text-3xl font-black text-slate-800 focus:ring-8 focus:ring-amber-500/5 focus:border-amber-500 transition-all outline-none shadow-sm"
                                 value={amount}
-                                onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                                onChange={(e) => setAmount(e.target.value)}
                                 placeholder="0.00"
                             />
                         </div>
@@ -355,11 +357,11 @@ export default function UnifiedSubmissionForm({
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                             <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">80% Remit</p>
-                            <p className="text-sm md:text-md font-black text-slate-800">₦{(amount * 0.8).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <p className="text-sm md:text-md font-black text-slate-800">₦{(Number(amount || 0) * 0.8).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         </div>
                         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                             <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">20% Local</p>
-                            <p className="text-sm md:text-md font-black text-slate-800">₦{(amount * 0.2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <p className="text-sm md:text-md font-black text-slate-800">₦{(Number(amount || 0) * 0.2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         </div>
                     </div>
                 </div>
