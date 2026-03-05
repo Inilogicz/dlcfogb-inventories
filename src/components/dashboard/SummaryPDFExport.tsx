@@ -1,8 +1,7 @@
-"use client"
-
 import React, { useState } from 'react'
-import { Download, Loader2, FileText } from "lucide-react"
+import { Download, Loader2, FileText, LayoutGrid, Building2, MapPin } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { Modal } from "@/components/ui/Modal"
 
 interface SummaryPDFExportProps {
     role: string
@@ -12,6 +11,8 @@ interface SummaryPDFExportProps {
     selectedYear?: number
 }
 
+type ExportLevel = 'center' | 'cluster' | 'region'
+
 export default function SummaryPDFExport({
     role,
     regionId,
@@ -20,18 +21,19 @@ export default function SummaryPDFExport({
     selectedYear = new Date().getFullYear()
 }: SummaryPDFExportProps) {
     const [exporting, setExporting] = useState(false)
+    const [isModalOpen, setIsModalOpen] = useState(false)
     const supabase = createClient()
 
-    const generatePDF = async () => {
+    const generatePDF = async (level: ExportLevel) => {
         setExporting(true)
+        setIsModalOpen(false)
         try {
-            // Dynamic imports for PDF libraries to avoid SSR issues
             const [{ jsPDF }, { default: autoTable }] = await Promise.all([
                 import('jspdf'),
                 import('jspdf-autotable')
             ])
 
-            // 1. Fetch Service Types and Scope Name
+            // 1. Fetch Metadata
             const [{ data: sTypes }, { data: scopeInfo }] = await Promise.all([
                 supabase.from('service_types').select('id, name'),
                 role === 'cluster_admin' ?
@@ -51,25 +53,17 @@ export default function SummaryPDFExport({
                 if (key.includes('MONDAY')) serviceMap[st.id] = 'MONDAY'
                 if (key.includes('THURSDAY')) serviceMap[st.id] = 'THURSDAY'
                 if (key.includes('KOINONIA')) serviceMap[st.id] = 'KOINONIA'
+                if (key.includes('WORKER')) serviceMap[st.id] = 'WORKERS'
             })
 
-            // 2. Fetch Data based on scope with deeper joins
+            // 2. Fetch Detailed Data
             const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
             const endDate = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0]
 
             let query = supabase.from('attendance_submissions').select(`
                 *,
-                centers (
-                    name,
-                    clusters (
-                        id,
-                        name
-                    )
-                ),
-                clusters (
-                    id,
-                    name
-                )
+                centers (id, name, clusters(id, name)),
+                clusters (id, name, regions(id, name))
             `).gte('service_date', startDate).lte('service_date', endDate)
 
             if (role === 'cluster_admin' && clusterId) {
@@ -82,153 +76,163 @@ export default function SummaryPDFExport({
 
             const { data: submissions } = await query
 
-            // 3. Aggregate Data by Location and Service Type
-            const aggregated: Record<string, any> = {}
-            submissions?.forEach(sub => {
-                // Determine Cluster and Center names
-                const centerName = sub.centers?.name;
-                const clusterName = sub.clusters?.name || (sub.centers as any)?.clusters?.name;
-                const clusterIdResolved = sub.cluster_id || (sub.centers as any)?.clusters?.id;
-
-                let locationId = 'unassigned';
-                let locationName = 'Unknown';
-
-                if (role === 'cluster_admin') {
-                    // Show Fellowship Centers
-                    locationId = sub.center_id || 'unassigned';
-                    locationName = centerName || 'Unknown Center';
-                } else {
-                    // Show Districts (Clusters)
-                    locationId = clusterIdResolved || 'unassigned';
-                    locationName = clusterName || 'Unknown District';
-                }
-
-                const typeKey = serviceMap[sub.service_type_id]
-
-                if (!typeKey) return // Skip other services if not in template
-
-                if (!aggregated[locationId]) {
-                    aggregated[locationId] = {
-                        name: locationName,
-                        SUNDAY: { mb: 0, ms: 0, yb: 0, ys: 0, cb: 0, cs: 0, total: 0 },
-                        MONDAY: { mb: 0, ms: 0, yb: 0, ys: 0, cb: 0, cs: 0, total: 0 },
-                        THURSDAY: { mb: 0, ms: 0, yb: 0, ys: 0, cb: 0, cs: 0, total: 0 },
-                        KOINONIA: { mb: 0, ms: 0, yb: 0, ys: 0, cb: 0, cs: 0, total: 0 }
-                    }
-                }
-
-                const data = aggregated[locationId][typeKey]
-                data.mb += sub.adult_brothers
-                data.ms += sub.adult_sisters
-                data.yb += sub.youth_brothers
-                data.ys += sub.youth_sisters
-                data.cb += sub.children_brothers
-                data.cs += sub.children_sisters
-                data.total += (sub.adult_brothers + sub.adult_sisters + sub.youth_brothers + sub.youth_sisters + sub.children_brothers + sub.children_sisters)
+            // 3. Multi-level Aggregation
+            const getEmptyMetrics = () => ({ mb: 0, ms: 0, yb: 0, ys: 0, cb: 0, cs: 0, total: 0 })
+            const getEmptyRow = (name: string) => ({
+                name,
+                SUNDAY: getEmptyMetrics(),
+                MONDAY: getEmptyMetrics(),
+                THURSDAY: getEmptyMetrics(),
+                KOINONIA: getEmptyMetrics(),
+                WORKERS: getEmptyMetrics()
             })
 
-            // 4. PDF Generation
-            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+            const aggregated: Record<string, any> = {}
 
-            // Header Content
-            doc.setFontSize(14)
-            doc.setFont("helvetica", "bold")
-            doc.text(`DEEPER LIFE BIBLE CHURCH ${regionNameHeader.toUpperCase()}.`, 148, 15, { align: "center" })
-            doc.setFontSize(12)
-            doc.text("SUMMARY OF REGIONAL WEEKLY REPORTS.", 148, 22, { align: "center" })
+            submissions?.forEach(sub => {
+                const centerObj = sub.centers;
+                const clusterObj = sub.clusters || (centerObj as any)?.clusters;
 
-            doc.setFontSize(10)
-            if (role === 'cluster_admin') {
-                doc.text(`CLUSTER: ${scopeName.toUpperCase()}`, 148, 28, { align: "center" })
-            } else if (role === 'region_admin') {
-                doc.text(`REGION: ${scopeName.toUpperCase()}`, 148, 28, { align: "center" })
+                const clusterName = clusterObj?.name || 'STATE GENERAL';
+                const centerName = centerObj?.name || (clusterObj?.name ? `${clusterObj.name} (COMBINED)` : 'GENERAL');
+                const clusterIdResolved = clusterObj?.id || 'state';
+                const typeKey = serviceMap[sub.service_type_id]
+
+                if (!typeKey) return
+
+                if (level === 'center') {
+                    if (!aggregated[clusterIdResolved]) {
+                        aggregated[clusterIdResolved] = { name: clusterName, centers: {} }
+                    }
+                    const centerId = sub.center_id || 'unassigned'
+                    if (!aggregated[clusterIdResolved].centers[centerId]) {
+                        aggregated[clusterIdResolved].centers[centerId] = getEmptyRow(centerName)
+                    }
+                    const metrics = aggregated[clusterIdResolved].centers[centerId][typeKey]
+                    updateMetrics(metrics, sub)
+                } else if (level === 'cluster') {
+                    if (!aggregated[clusterIdResolved]) aggregated[clusterIdResolved] = getEmptyRow(clusterName)
+                    updateMetrics(aggregated[clusterIdResolved][typeKey], sub)
+                } else if (level === 'region') {
+                    const rName = sub.clusters?.regions?.name || 'State'
+                    const rId = sub.clusters?.regions?.id || 'state'
+                    if (!aggregated[rId]) aggregated[rId] = getEmptyRow(rName)
+                    updateMetrics(aggregated[rId][typeKey], sub)
+                }
+            })
+
+            function updateMetrics(metrics: any, sub: any) {
+                metrics.mb += sub.adult_brothers || 0
+                metrics.ms += sub.adult_sisters || 0
+                metrics.yb += sub.youth_brothers || 0
+                metrics.ys += sub.youth_sisters || 0
+                metrics.cb += sub.children_brothers || 0
+                metrics.cs += sub.children_sisters || 0
+                metrics.total += ((sub.adult_brothers || 0) + (sub.adult_sisters || 0) + (sub.youth_brothers || 0) + (sub.youth_sisters || 0) + (sub.children_brothers || 0) + (sub.children_sisters || 0))
             }
 
+            // 4. Build Table Rows with Headers and Totals
+            const tableRows: any[] = []
+            const grandTotalMetrics = getEmptyRow('GRAND TOTAL')
+
+            if (level === 'center') {
+                Object.values(aggregated).sort((a, b) => a.name.localeCompare(b.name)).forEach(cluster => {
+                    // Cluster Header Row
+                    tableRows.push([{ content: cluster.name.toUpperCase(), colSpan: 36, styles: { fillColor: [240, 245, 255], fontStyle: 'bold' } }])
+
+                    const clusterSubtotal = getEmptyRow(`SUBTOTAL: ${cluster.name}`)
+
+                    Object.values(cluster.centers).sort((a: any, b: any) => a.name.localeCompare(b.name)).forEach((center: any) => {
+                        tableRows.push(formatMetricsRow(center))
+                        accumulateTotals(clusterSubtotal, center)
+                    })
+
+                    // Cluster Subtotal Row
+                    const subtotalRow = formatMetricsRow(clusterSubtotal);
+                    subtotalRow[0] = { content: subtotalRow[0], styles: { fontStyle: 'bold', fillColor: [245, 245, 245] } }
+                    tableRows.push(subtotalRow)
+                    accumulateTotals(grandTotalMetrics, clusterSubtotal)
+                })
+            } else {
+                Object.values(aggregated).sort((a, b) => a.name.localeCompare(b.name)).forEach(loc => {
+                    tableRows.push(formatMetricsRow(loc))
+                    accumulateTotals(grandTotalMetrics, loc)
+                })
+            }
+
+            // Add Grand Total
+            const finalRow = formatMetricsRow(grandTotalMetrics)
+            finalRow[0] = { content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [230, 230, 230] } }
+            tableRows.push(finalRow)
+
+            function formatMetricsRow(loc: any) {
+                return [
+                    loc.name.toUpperCase(),
+                    loc.SUNDAY.mb, loc.SUNDAY.ms, loc.SUNDAY.yb, loc.SUNDAY.ys, loc.SUNDAY.cb, loc.SUNDAY.cs, loc.SUNDAY.total,
+                    loc.MONDAY.mb, loc.MONDAY.ms, loc.MONDAY.yb, loc.MONDAY.ys, loc.MONDAY.cb, loc.MONDAY.cs, loc.MONDAY.total,
+                    loc.THURSDAY.mb, loc.THURSDAY.ms, loc.THURSDAY.yb, loc.THURSDAY.ys, loc.THURSDAY.cb, loc.THURSDAY.cs, loc.THURSDAY.total,
+                    loc.KOINONIA.mb, loc.KOINONIA.ms, loc.KOINONIA.yb, loc.KOINONIA.ys, loc.KOINONIA.cb, loc.KOINONIA.cs, loc.KOINONIA.total,
+                    loc.WORKERS.mb, loc.WORKERS.ms, loc.WORKERS.yb, loc.WORKERS.ys, loc.WORKERS.cb, loc.WORKERS.cs, loc.WORKERS.total
+                ]
+            }
+
+            function accumulateTotals(target: any, source: any) {
+                ['SUNDAY', 'MONDAY', 'THURSDAY', 'KOINONIA', 'WORKERS'].forEach(type => {
+                    ['mb', 'ms', 'yb', 'ys', 'cb', 'cs', 'total'].forEach(field => {
+                        target[type][field] += source[type][field]
+                    })
+                })
+            }
+
+            // 5. Generate PDF
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+            doc.setFontSize(14).setFont("helvetica", "bold").text(`DEEPER LIFE BIBLE CHURCH ${regionNameHeader.toUpperCase()}.`, 148, 15, { align: "center" })
+            doc.setFontSize(12).text("SUMMARY OF REGIONAL WEEKLY REPORTS.", 148, 22, { align: "center" })
+            doc.setFontSize(10)
+            const levelLabel = level === 'center' ? 'CENTER DETAIL' : level === 'cluster' ? 'DISTRICT SUMMARY' : 'REGION SUMMARY'
+            doc.text(`${levelLabel} REPORT | ${scopeName.toUpperCase()}`, 148, 28, { align: "center" })
             doc.text(`MONTH: ${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' }).toUpperCase()}`, 14, 34)
             doc.text(`YEAR: ${selectedYear}`, 280, 34, { align: "right" })
-
-            // AutoTable Construction
-            const rows = Object.values(aggregated).map((loc: any) => [
-                loc.name.toUpperCase(),
-                loc.SUNDAY.mb, loc.SUNDAY.ms, loc.SUNDAY.yb, loc.SUNDAY.ys, loc.SUNDAY.cb, loc.SUNDAY.cs, loc.SUNDAY.total,
-                loc.MONDAY.mb, loc.MONDAY.ms, loc.MONDAY.yb, loc.MONDAY.ys, loc.MONDAY.cb, loc.MONDAY.cs, loc.MONDAY.total,
-                loc.THURSDAY.mb, loc.THURSDAY.ms, loc.THURSDAY.yb, loc.THURSDAY.ys, loc.THURSDAY.cb, loc.THURSDAY.cs, loc.THURSDAY.total,
-                loc.KOINONIA.mb, loc.KOINONIA.ms, loc.KOINONIA.yb, loc.KOINONIA.ys, loc.KOINONIA.cb, loc.KOINONIA.cs, loc.KOINONIA.total
-            ])
-
-            // Total Row
-            const totals = [
-                "TOTAL",
-                ...Array(28).fill(0).map((_, i) => Object.values(aggregated).reduce((sum: number, loc: any) => {
-                    const keys = ['SUNDAY', 'MONDAY', 'THURSDAY', 'KOINONIA']
-                    const typeIndex = Math.floor(i / 7)
-                    const dataIndex = i % 7
-                    const type = keys[typeIndex]
-                    const fields = ['mb', 'ms', 'yb', 'ys', 'cb', 'cs', 'total']
-                    return sum + loc[type][fields[dataIndex]]
-                }, 0))
-            ]
-            rows.push(totals)
 
             autoTable(doc, {
                 startY: 35,
                 head: [
                     [
-                        { content: role === 'cluster_admin' ? 'FELLOWSHIP CENTER' : 'DISTRICT/CLUSTER', rowSpan: 4, styles: { halign: 'center', valign: 'middle' } },
-                        { content: 'SUNDAY WORSHIP SERVICE', colSpan: 7, styles: { halign: 'center' } },
+                        { content: level === 'center' ? 'FELLOWSHIP CENTER' : level === 'cluster' ? 'DISTRICT / CLUSTER' : 'REGION', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } },
+                        { content: 'SUNDAY SERVICE', colSpan: 7, styles: { halign: 'center' } },
                         { content: 'MONDAY BIBLE STUDY', colSpan: 7, styles: { halign: 'center' } },
-                        { content: 'THURSDAY REVIVAL HOUR', colSpan: 7, styles: { halign: 'center' } },
-                        { content: 'KOINONIA', colSpan: 7, styles: { halign: 'center' } }
+                        { content: 'THURSDAY REVIVAL', colSpan: 7, styles: { halign: 'center' } },
+                        { content: 'KOINONIA', colSpan: 7, styles: { halign: 'center' } },
+                        { content: 'WORKERS MEETING', colSpan: 7, styles: { halign: 'center' } }
                     ],
                     [
-                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'TOTAL', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } },
-                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'TOTAL', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } },
-                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'CHILDERN', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'TOTAL', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } },
-                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'TOTAL', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } }
+                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } }, { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } }, { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } }, { content: 'TOTAL', styles: { halign: 'center' } },
+                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } }, { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } }, { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } }, { content: 'TOTAL', styles: { halign: 'center' } },
+                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } }, { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } }, { content: 'CHILDERN', colSpan: 2, styles: { halign: 'center' } }, { content: 'TOTAL', styles: { halign: 'center' } },
+                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } }, { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } }, { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } }, { content: 'TOTAL', styles: { halign: 'center' } },
+                        { content: 'ADULT', colSpan: 2, styles: { halign: 'center' } }, { content: 'YOUTH', colSpan: 2, styles: { halign: 'center' } }, { content: 'CHILDREN', colSpan: 2, styles: { halign: 'center' } }, { content: 'TOTAL', styles: { halign: 'center' } }
                     ],
                     [
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } },
-                        { content: 'M', styles: { halign: 'center' } }, { content: 'F', styles: { halign: 'center' } }
+                        'M', 'F', 'M', 'F', 'M', 'F', '', 'M', 'F', 'M', 'F', 'M', 'F', 'Σ',
+                        'M', 'F', 'M', 'F', 'M', 'F', '', 'M', 'F', 'M', 'F', 'M', 'F', 'Σ',
+                        'M', 'F', 'M', 'F', 'M', 'F', ''
                     ]
                 ],
-                body: rows as any,
+                body: tableRows,
                 theme: 'grid',
-                styles: { fontSize: 7, cellPadding: 1, lineWidth: 0.1, lineColor: [0, 0, 0], textColor: [0, 0, 0] },
-                headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 },
-                columnStyles: {
-                    0: { fontStyle: 'bold', cellWidth: 35 }
-                },
-                didParseCell: (data: any) => {
-                    if (data.row.index === rows.length - 1) {
-                        data.cell.styles.fontStyle = 'bold'
-                        data.cell.styles.fillColor = [245, 245, 245]
+                styles: { fontSize: 5.5, cellPadding: 0.8, lineWidth: 0.1, textColor: [0, 0, 0] },
+                headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold' },
+                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 28 } },
+                didParseCell: (data) => {
+                    const cellContent = data.cell.raw as any;
+                    if (cellContent?.styles?.fillColor) {
+                        data.cell.styles.fillColor = cellContent.styles.fillColor;
+                        data.cell.styles.fontStyle = cellContent.styles.fontStyle;
                     }
                 }
             })
 
-            doc.save(`Weekly_Summary_${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'short' })}_${selectedYear}.pdf`)
+            doc.save(`${levelLabel}_REPORT_${selectedMonth}_${selectedYear}.pdf`)
         } catch (error) {
             console.error("Export failed:", error)
         } finally {
@@ -239,17 +243,73 @@ export default function SummaryPDFExport({
     if (!['super_admin', 'region_admin', 'cluster_admin'].includes(role)) return null
 
     return (
-        <button
-            onClick={generatePDF}
-            disabled={exporting}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white text-slate-800 border border-slate-200 rounded-xl hover:bg-amber-50 hover:text-amber-700 hover:border-amber-100 transition-all font-black text-[10px] tracking-widest shadow-xl shadow-slate-200/50 disabled:opacity-50"
-        >
-            {exporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-                <FileText className="w-4 h-4" />
-            )}
-            SUMMARY PDF
-        </button>
+        <>
+            <button
+                onClick={() => setIsModalOpen(true)}
+                disabled={exporting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white text-slate-800 border border-slate-200 rounded-xl hover:bg-amber-50 hover:text-amber-700 hover:border-amber-100 transition-all font-black text-[10px] tracking-widest shadow-xl shadow-slate-200/50 disabled:opacity-50"
+            >
+                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                SUMMARY PDF
+            </button>
+
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title="Select Summary Detail Level"
+                maxWidth="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-500 mb-6 font-medium">Choose how you want to organize your summary report.</p>
+
+                    <button
+                        onClick={() => generatePDF('center')}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-brand-blue hover:bg-blue-50 transition-all group"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-white rounded-xl shadow-sm group-hover:bg-brand-blue group-hover:text-white transition-colors">
+                                <Building2 className="w-5 h-5" />
+                            </div>
+                            <div className="text-left">
+                                <p className="font-bold text-gray-900">Per Center (Detailed)</p>
+                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Rows for each center + subtotals</p>
+                            </div>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={() => generatePDF('cluster')}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-brand-blue hover:bg-blue-50 transition-all group"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-white rounded-xl shadow-sm group-hover:bg-brand-blue group-hover:text-white transition-colors">
+                                <LayoutGrid className="w-5 h-5" />
+                            </div>
+                            <div className="text-left">
+                                <p className="font-bold text-gray-900">Per Cluster / District</p>
+                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Summary totals for each cluster</p>
+                            </div>
+                        </div>
+                    </button>
+
+                    {role === 'super_admin' && (
+                        <button
+                            onClick={() => generatePDF('region')}
+                            className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-brand-blue hover:bg-blue-50 transition-all group"
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-white rounded-xl shadow-sm group-hover:bg-brand-blue group-hover:text-white transition-colors">
+                                    <MapPin className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="font-bold text-gray-900">Per Region</p>
+                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Summary totals for each region</p>
+                                </div>
+                            </div>
+                        </button>
+                    )}
+                </div>
+            </Modal>
+        </>
     )
 }

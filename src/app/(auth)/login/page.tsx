@@ -21,40 +21,36 @@ export default function LoginPage() {
                     </div>
                 </div>
 
-                {/* Hero text */}
-                <div className="relative space-y-6">
-                    <div className="space-y-3">
-                        <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
-                            <div className="w-2 h-2 rounded-full bg-brand-orange animate-pulse" />
-                            <span className="text-white/80 text-xs font-semibold uppercase tracking-widest">Live Dashboard</span>
-                        </div>
-                        <h1 className="text-4xl font-black text-white leading-tight">
-                            Deeper Life Campus Fellowship<br />
-                            <span className="text-brand-orange">Management Portal</span>
-                        </h1>
-                        <p className="text-white/60 text-base leading-relaxed max-w-sm">
-                            Raising Saintly Scholars
-                        </p>
+                {/* Hero section with Image */}
+                <div className="relative flex-1 flex flex-col justify-center items-center text-center space-y-8">
+                    <div className="relative w-72 h-72 md:w-96 md:h-96">
+                        <div className="absolute inset-0 bg-white/10 rounded-full blur-3xl animate-pulse" />
+                        <Image
+                            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQl8KrUtKMR-FCPaZQBhIySAVmKvQGazRJMoA&s"
+                            alt="Brand Logo"
+                            fill
+                            className="object-contain relative drop-shadow-2xl"
+                            priority
+                        />
                     </div>
 
-                    {/* Stats preview */}
-                    {/* <div className="grid grid-cols-3 gap-3">
-                        {[
-                            { label: "Centers", value: "20+" },
-                            { label: "Clusters", value: "5+" },
-                            { label: "Services", value: "∞" },
-                        ].map(item => (
-                            <div key={item.label} className="bg-white/10 rounded-2xl p-4 text-center backdrop-blur">
-                                <p className="text-2xl font-black text-white">{item.value}</p>
-                                <p className="text-xs text-white/50 font-medium mt-1">{item.label}</p>
-                            </div>
-                        ))}
-                    </div> */}
+                    <div className="space-y-4 max-w-sm">
+                        <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-2 backdrop-blur-sm border border-white/5">
+                            <div className="w-2 h-2 rounded-full bg-brand-orange animate-pulse" />
+                            <span className="text-white font-black text-[10px] uppercase tracking-[0.2em]">DLCF OYO SOUTH</span>
+                        </div>
+                        <h1 className="text-3xl font-black text-white leading-tight">
+                            Raising Saintly <span className="text-brand-orange">Scholars</span>
+                        </h1>
+                        <p className="text-white/60 text-sm font-medium leading-relaxed">
+                            A centralized portal for attendance entry, inventory management, and regional reporting for DLCF Oyo South.
+                        </p>
+                    </div>
                 </div>
 
                 {/* Footer */}
-                <p className="relative text-white/20 text-xs">
-                    © {new Date().getFullYear()} DLCF Oyo South. All rights reserved.
+                <p className="relative text-white/20 text-xs font-bold tracking-widest uppercase">
+                    © {new Date().getFullYear()} DLCF Oyo South
                 </p>
             </div>
 

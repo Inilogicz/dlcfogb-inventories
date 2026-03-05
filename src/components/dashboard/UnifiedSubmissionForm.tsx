@@ -95,10 +95,16 @@ export default function UnifiedSubmissionForm({
         setLoading(true)
         setMessage(null)
 
+        const currentClusterId = scope === 'cluster'
+            ? selectedCluster
+            : (scope === 'center' && selectedCenter
+                ? centers.find(c => c.id === selectedCenter)?.cluster_id
+                : null);
+
         const payload_att = {
             submission_level: scope,
             center_id: scope === 'center' ? selectedCenter : null,
-            cluster_id: scope === 'cluster' ? selectedCluster : null,
+            cluster_id: currentClusterId || (scope === 'cluster' ? selectedCluster : null),
             service_type_id: selectedType,
             service_date: date,
             adult_brothers: adultBrothers,
@@ -126,7 +132,7 @@ export default function UnifiedSubmissionForm({
             .insert({
                 submission_level: scope,
                 center_id: scope === 'center' ? selectedCenter : null,
-                cluster_id: scope === 'cluster' ? selectedCluster : null,
+                cluster_id: currentClusterId || (scope === 'cluster' ? selectedCluster : null),
                 service_type_id: selectedType,
                 service_date: date,
                 amount_100: amount

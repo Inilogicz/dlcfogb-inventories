@@ -58,6 +58,35 @@ create policy "Admins can view attendance in their scope." on attendance_submiss
   ))
 );
 
+drop policy if exists "Authorized users can insert attendance within 48h of service." on attendance_submissions;
+create policy "Authorized users can insert attendance within 48h of service." on attendance_submissions for insert with check (
+  (
+    is_super_admin() or
+    (is_center_rep() and center_id = get_user_center_id()) or
+    (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
+    (is_cluster_admin() and submission_level = 'center' and get_center_cluster_id(center_id) = get_user_cluster_id()) or
+    (is_region_admin() and submission_level = 'cluster' and get_cluster_region_id(cluster_id) = get_user_region_id()) or
+    (is_region_admin() and submission_level = 'center' and get_cluster_region_id(get_center_cluster_id(center_id)) = get_user_region_id())
+  ) 
+  and (
+    is_super_admin() or 
+    current_date <= (service_date + interval '48 hours')
+  )
+);
+
+drop policy if exists "Authorized users can update attendance ONLY on the service day." on attendance_submissions;
+create policy "Authorized users can update attendance ONLY on the service day." on attendance_submissions for update using (
+  (
+    is_super_admin() or
+    (is_center_rep() and center_id = get_user_center_id()) or
+    (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
+    (is_cluster_admin() and submission_level = 'center' and get_center_cluster_id(center_id) = get_user_cluster_id()) or
+    (is_region_admin() and submission_level = 'cluster' and get_cluster_region_id(cluster_id) = get_user_region_id()) or
+    (is_region_admin() and submission_level = 'center' and get_cluster_region_id(get_center_cluster_id(center_id)) = get_user_region_id())
+  )
+  and (is_super_admin() or service_date = current_date)
+);
+
 -- Fix Offering Submissions Recursive Policies
 drop policy if exists "Admins can view offerings in their scope." on offering_submissions;
 create policy "Admins can view offerings in their scope." on offering_submissions for select using (
@@ -70,6 +99,35 @@ create policy "Admins can view offerings in their scope." on offering_submission
     (submission_level = 'center' and get_center_cluster_id(center_id) = get_user_cluster_id()) or
     (submission_level = 'cluster' and cluster_id = get_user_cluster_id())
   ))
+);
+
+drop policy if exists "Authorized users can insert offerings within 48h of service." on offering_submissions;
+create policy "Authorized users can insert offerings within 48h of service." on offering_submissions for insert with check (
+  (
+    is_super_admin() or
+    (is_center_rep() and center_id = get_user_center_id()) or
+    (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
+    (is_cluster_admin() and submission_level = 'center' and get_center_cluster_id(center_id) = get_user_cluster_id()) or
+    (is_region_admin() and submission_level = 'cluster' and get_cluster_region_id(cluster_id) = get_user_region_id()) or
+    (is_region_admin() and submission_level = 'center' and get_cluster_region_id(get_center_cluster_id(center_id)) = get_user_region_id())
+  ) 
+  and (
+    is_super_admin() or 
+    current_date <= (service_date + interval '48 hours')
+  )
+);
+
+drop policy if exists "Authorized users can update offerings ONLY on the service day." on offering_submissions;
+create policy "Authorized users can update offerings ONLY on the service day." on offering_submissions for update using (
+  (
+    is_super_admin() or
+    (is_center_rep() and center_id = get_user_center_id()) or
+    (is_cluster_admin() and submission_level = 'cluster' and cluster_id = get_user_cluster_id()) or
+    (is_cluster_admin() and submission_level = 'center' and get_center_cluster_id(center_id) = get_user_cluster_id()) or
+    (is_region_admin() and submission_level = 'cluster' and get_cluster_region_id(cluster_id) = get_user_region_id()) or
+    (is_region_admin() and submission_level = 'center' and get_cluster_region_id(get_center_cluster_id(center_id)) = get_user_region_id())
+  )
+  and (is_super_admin() or service_date = current_date)
 );
 
 -- Fix Inventory Items Recursive Policies
