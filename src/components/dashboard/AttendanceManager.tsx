@@ -21,7 +21,7 @@ export default function AttendanceManager({ profile, type }: AttendanceManagerPr
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [refreshKey, setRefreshKey] = useState(0)
 
-    const canSubmit = profile.role === 'center_rep' || profile.role === 'cluster_admin'
+    const canSubmit = profile.role === 'center_rep' || profile.role === 'cluster_admin' || profile.role === 'region_admin'
 
     const handleSuccess = () => {
         setIsModalOpen(false)
@@ -87,6 +87,7 @@ export default function AttendanceManager({ profile, type }: AttendanceManagerPr
                     <UnifiedSubmissionForm
                         centerId={profile.center_id}
                         clusterId={profile.cluster_id}
+                        regionId={profile.region_id}
                         role={profile.role}
                         onSuccess={handleSuccess}
                         onCancel={() => setIsModalOpen(false)}

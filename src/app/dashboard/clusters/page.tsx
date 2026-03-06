@@ -3,7 +3,7 @@ import ClusterManager from "@/components/dashboard/ClusterManager"
 import { MapPin } from "lucide-react"
 
 export default async function ClustersPage() {
-    await requireRole(['super_admin'])
+    await requireRole(['super_admin', 'region_admin'])
 
     return (
         <div className="space-y-8">

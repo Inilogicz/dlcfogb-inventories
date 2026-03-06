@@ -3,7 +3,7 @@ import UserManager from "@/components/dashboard/UserManager"
 import { Users } from "lucide-react"
 
 export default async function UsersPage() {
-    await requireRole(['super_admin'])
+    await requireRole(['super_admin', 'region_admin'])
 
     return (
         <div className="space-y-8">

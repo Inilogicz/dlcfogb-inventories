@@ -8,6 +8,7 @@ import { Loader2, Plus, Users, PhilippinePeso as Naira, Calendar, Building2, Glo
 interface UnifiedSubmissionFormProps {
     centerId?: string | null
     clusterId?: string | null
+    regionId?: string | null
     role: string
     onSuccess?: () => void
     onCancel?: () => void
@@ -16,6 +17,7 @@ interface UnifiedSubmissionFormProps {
 export default function UnifiedSubmissionForm({
     centerId,
     clusterId,
+    regionId,
     role,
     onSuccess,
     onCancel
@@ -60,6 +62,11 @@ export default function UnifiedSubmissionForm({
             if (role === 'super_admin') {
                 promises.push(supabase.from('centers').select('*').order('name'))
                 promises.push(supabase.from('clusters').select('*').order('name'))
+            } else if (role === 'region_admin' && regionId) {
+                promises.push(supabase.from('clusters').select('*').eq('region_id', regionId).order('name'))
+                const { data: regionClusters } = await supabase.from('clusters').select('id').eq('region_id', regionId)
+                const clusterIds = regionClusters?.map(cl => cl.id) || []
+                promises.push(supabase.from('centers').select('*').in('cluster_id', clusterIds).order('name'))
             } else if (role === 'cluster_admin' && clusterId) {
                 promises.push(supabase.from('centers').select('*').eq('cluster_id', clusterId).order('name'))
                 promises.push(supabase.from('clusters').select('*').eq('id', clusterId).order('name'))
@@ -69,8 +76,16 @@ export default function UnifiedSubmissionForm({
 
             const results = await Promise.all(promises)
             if (results[0].data) setServiceTypes(results[0].data)
-            if (results[1]?.data) setCenters(results[1].data)
-            if (results[2]?.data) setClusters(results[2].data)
+
+            if (role === 'region_admin') {
+                // For region_admin, clusters are results[1], centers are results[2]
+                if (results[1]?.data) setClusters(results[1].data)
+                if (results[2]?.data) setCenters(results[2].data)
+            } else {
+                // Default: centers are results[1], clusters are results[2]
+                if (results[1]?.data) setCenters(results[1].data)
+                if (results[2]?.data) setClusters(results[2].data)
+            }
 
             setFetchingData(false)
         }
@@ -107,6 +122,7 @@ export default function UnifiedSubmissionForm({
             submission_level: scope,
             center_id: scope === 'center' ? selectedCenter : null,
             cluster_id: currentClusterId || (scope === 'cluster' ? selectedCluster : null),
+            region_id: regionId || null,
             service_type_id: selectedType,
             service_date: date,
             adult_brothers: Number(adultBrothers || 0),
@@ -135,6 +151,7 @@ export default function UnifiedSubmissionForm({
                 submission_level: scope,
                 center_id: scope === 'center' ? selectedCenter : null,
                 cluster_id: currentClusterId || (scope === 'cluster' ? selectedCluster : null),
+                region_id: regionId || null,
                 service_type_id: selectedType,
                 service_date: date,
                 amount_100: Number(amount || 0)
@@ -190,21 +207,27 @@ export default function UnifiedSubmissionForm({
             {/* Scope & Basic Info */}
             <div className="space-y-6">
                 <div className="flex flex-wrap items-center gap-2 p-1 md:p-1.5 bg-slate-100/50 rounded-2xl w-full sm:w-fit border border-slate-200/50 shadow-sm">
-                    {role === 'super_admin' && (
+                    {(role === 'super_admin' || role === 'region_admin') && (
                         <button
                             type="button"
-                            onClick={() => setScope('general')}
+                            onClick={() => {
+                                setScope('general')
+                                if (role === 'region_admin' && regionId) {
+                                    // General regional report
+                                }
+                            }}
                             className={`flex-1 sm:flex-none px-4 md:px-5 py-2 md:py-2.5 rounded-xl text-[9px] md:text-[10px] font-black tracking-widest transition-all ${scope === 'general' ? 'bg-white text-slate-800 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             GENERAL
                         </button>
                     )}
-                    {(role === 'super_admin' || role === 'cluster_admin') && (
+                    {(role === 'super_admin' || role === 'region_admin' || role === 'cluster_admin') && (
                         <button
                             type="button"
                             onClick={() => {
                                 setScope('cluster')
                                 if (role === 'cluster_admin' && clusterId) setSelectedCluster(clusterId)
+                                // region_admin can select cluster
                             }}
                             className={`flex-1 sm:flex-none px-4 md:px-5 py-2 md:py-2.5 rounded-xl text-[9px] md:text-[10px] font-black tracking-widest transition-all ${scope === 'cluster' ? 'bg-white text-slate-800 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                         >

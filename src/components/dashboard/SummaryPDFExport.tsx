@@ -24,7 +24,7 @@ export default function SummaryPDFExport({
     const [isModalOpen, setIsModalOpen] = useState(false)
     const supabase = createClient()
 
-    const generatePDF = async (level: ExportLevel) => {
+    const generatePDF = async (exportLevel: ExportLevel) => {
         setExporting(true)
         setIsModalOpen(false)
         try {
@@ -62,16 +62,14 @@ export default function SummaryPDFExport({
 
             let query = supabase.from('attendance_submissions').select(`
                 *,
-                centers (id, name, clusters(id, name)),
+                centers (id, name, clusters(id, name, regions(id, name))),
                 clusters (id, name, regions(id, name))
             `).gte('service_date', startDate).lte('service_date', endDate)
 
             if (role === 'cluster_admin' && clusterId) {
                 query = query.eq('cluster_id', clusterId)
             } else if (role === 'region_admin' && regionId) {
-                const { data: clData } = await supabase.from('clusters').select('id').eq('region_id', regionId)
-                const clIds = clData?.map(c => c.id) || []
-                query = query.in('cluster_id', clIds)
+                query = query.eq('region_id', regionId)
             }
 
             const { data: submissions } = await query
@@ -90,32 +88,33 @@ export default function SummaryPDFExport({
             const aggregated: Record<string, any> = {}
 
             submissions?.forEach(sub => {
+                const level = sub.submission_level;
                 const centerObj = sub.centers;
                 const clusterObj = sub.clusters || (centerObj as any)?.clusters;
+                const regionObj = clusterObj?.regions || sub.clusters?.regions;
 
-                const clusterName = clusterObj?.name || 'STATE GENERAL';
-                const centerName = centerObj?.name || (clusterObj?.name ? `${clusterObj.name} (COMBINED)` : 'GENERAL');
-                const clusterIdResolved = clusterObj?.id || 'state';
+                let clusterName = clusterObj?.name || 'REGIONAL GENERAL';
+                let centerName = centerObj?.name || (clusterObj?.name ? `${clusterObj.name} (COMBINED)` : 'COMBINED SERVICE');
+                let clusterIdResolved = clusterObj?.id || 'regional';
                 const typeKey = serviceMap[sub.service_type_id]
 
                 if (!typeKey) return
 
-                if (level === 'center') {
+                if (exportLevel === 'center') {
                     if (!aggregated[clusterIdResolved]) {
                         aggregated[clusterIdResolved] = { name: clusterName, centers: {} }
                     }
-                    const centerId = sub.center_id || 'unassigned'
-                    if (!aggregated[clusterIdResolved].centers[centerId]) {
-                        aggregated[clusterIdResolved].centers[centerId] = getEmptyRow(centerName)
+                    const cId = sub.center_id || (level === 'cluster' ? `cluster_${sub.cluster_id}` : 'regional_general')
+                    if (!aggregated[clusterIdResolved].centers[cId]) {
+                        aggregated[clusterIdResolved].centers[cId] = getEmptyRow(centerName)
                     }
-                    const metrics = aggregated[clusterIdResolved].centers[centerId][typeKey]
-                    updateMetrics(metrics, sub)
-                } else if (level === 'cluster') {
+                    updateMetrics(aggregated[clusterIdResolved].centers[cId][typeKey], sub)
+                } else if (exportLevel === 'cluster') {
                     if (!aggregated[clusterIdResolved]) aggregated[clusterIdResolved] = getEmptyRow(clusterName)
                     updateMetrics(aggregated[clusterIdResolved][typeKey], sub)
-                } else if (level === 'region') {
-                    const rName = sub.clusters?.regions?.name || 'State'
-                    const rId = sub.clusters?.regions?.id || 'state'
+                } else if (exportLevel === 'region') {
+                    const rName = regionObj?.name || (role === 'region_admin' ? scopeName : 'Unknown Region')
+                    const rId = regionObj?.id || sub.region_id || 'unknown'
                     if (!aggregated[rId]) aggregated[rId] = getEmptyRow(rName)
                     updateMetrics(aggregated[rId][typeKey], sub)
                 }
@@ -135,7 +134,7 @@ export default function SummaryPDFExport({
             const tableRows: any[] = []
             const grandTotalMetrics = getEmptyRow('GRAND TOTAL')
 
-            if (level === 'center') {
+            if (exportLevel === 'center') {
                 Object.values(aggregated).sort((a, b) => a.name.localeCompare(b.name)).forEach(cluster => {
                     // Cluster Header Row
                     tableRows.push([{ content: cluster.name.toUpperCase(), colSpan: 36, styles: { fillColor: [240, 245, 255], fontStyle: 'bold' } }])
@@ -189,7 +188,7 @@ export default function SummaryPDFExport({
             doc.setFontSize(14).setFont("helvetica", "bold").text(`DEEPER LIFE BIBLE CHURCH ${regionNameHeader.toUpperCase()}.`, 148, 15, { align: "center" })
             doc.setFontSize(12).text("SUMMARY OF REGIONAL WEEKLY REPORTS.", 148, 22, { align: "center" })
             doc.setFontSize(10)
-            const levelLabel = level === 'center' ? 'CENTER DETAIL' : level === 'cluster' ? 'DISTRICT SUMMARY' : 'REGION SUMMARY'
+            const levelLabel = exportLevel === 'center' ? 'CENTER DETAIL' : exportLevel === 'cluster' ? 'DISTRICT SUMMARY' : 'REGION SUMMARY'
             doc.text(`${levelLabel} REPORT | ${scopeName.toUpperCase()}`, 148, 28, { align: "center" })
             doc.text(`MONTH: ${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' }).toUpperCase()}`, 14, 34)
             doc.text(`YEAR: ${selectedYear}`, 280, 34, { align: "right" })
@@ -198,7 +197,7 @@ export default function SummaryPDFExport({
                 startY: 35,
                 head: [
                     [
-                        { content: level === 'center' ? 'FELLOWSHIP CENTER' : level === 'cluster' ? 'DISTRICT / CLUSTER' : 'REGION', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } },
+                        { content: exportLevel === 'center' ? 'FELLOWSHIP CENTER' : exportLevel === 'cluster' ? 'DISTRICT / CLUSTER' : 'REGION', rowSpan: 3, styles: { halign: 'center', valign: 'middle' } },
                         { content: 'SUNDAY SERVICE', colSpan: 7, styles: { halign: 'center' } },
                         { content: 'MONDAY BIBLE STUDY', colSpan: 7, styles: { halign: 'center' } },
                         { content: 'THURSDAY REVIVAL', colSpan: 7, styles: { halign: 'center' } },

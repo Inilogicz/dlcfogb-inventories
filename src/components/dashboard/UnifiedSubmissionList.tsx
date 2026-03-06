@@ -86,20 +86,14 @@ export default function UnifiedSubmissionList({
                 const clusterIds = clData?.map(cl => cl.id) || []
                 const centerIds = cData?.map(c => c.id) || []
 
-                // Filter by identifying if the submission belongs to the region via its clusters or centers
-                let filters = []
+                // Filter by identifying if the submission belongs to the region via its clusters, centers, OR is a regional general report
+                let filters = [`region_id.eq.${profile.region_id}`]
                 if (clusterIds.length > 0) filters.push(`cluster_id.in.(${clusterIds.join(',')})`)
                 if (centerIds.length > 0) filters.push(`center_id.in.(${centerIds.join(',')})`)
 
-                if (filters.length > 0) {
-                    const combinedFilter = filters.join(',')
-                    attQuery = attQuery.or(combinedFilter)
-                    offQuery = offQuery.or(combinedFilter)
-                } else {
-                    // No data in scope
-                    attQuery = attQuery.eq('id', '00000000-0000-0000-0000-000000000000')
-                    offQuery = offQuery.eq('id', '00000000-0000-0000-0000-000000000000')
-                }
+                const combinedFilter = filters.join(',')
+                attQuery = attQuery.or(combinedFilter)
+                offQuery = offQuery.or(combinedFilter)
             }
 
             const [attRes, offRes] = await Promise.all([
@@ -169,6 +163,8 @@ export default function UnifiedSubmissionList({
             locationName = centers[attendance?.center_id || offering?.center_id] || "Unknown Center"
         } else if (level === 'cluster') {
             locationName = `${clusters[attendance?.cluster_id || offering?.cluster_id] || "Unknown"} Cluster`
+        } else if (level === 'general') {
+            locationName = "Regional Combined Service"
         }
 
         return (

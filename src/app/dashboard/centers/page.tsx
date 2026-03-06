@@ -3,7 +3,7 @@ import CenterManager from "@/components/dashboard/CenterManager"
 import { Building2 } from "lucide-react"
 
 export default async function CentersPage() {
-    await requireRole(['super_admin', 'cluster_admin'])
+    await requireRole(['super_admin', 'region_admin', 'cluster_admin'])
 
     return (
         <div className="space-y-8">
